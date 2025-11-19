@@ -3,6 +3,7 @@ package buckets
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/internxt/rclone-adapter/config"

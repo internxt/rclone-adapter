@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/internxt/rclone/endpoints"
+	"github.com/internxt/rclone-adapter/endpoints"
 )
 
 const (
