@@ -11,11 +11,9 @@ import (
 	"github.com/internxt/rclone-adapter/config"
 )
 
-const filesPath = "/files"
-
 // DeleteFile deletes a file by UUID
 func DeleteFile(cfg *config.Config, uuid string) error {
-	u, err := url.Parse(cfg.DriveAPIURL + filesPath + "/" + uuid)
+	u, err := url.Parse(cfg.Endpoints.FileDelete(uuid))
 	if err != nil {
 		return err
 	}
@@ -40,7 +38,7 @@ func DeleteFile(cfg *config.Config, uuid string) error {
 
 // RenameFile renames a file by UUID with the given new name and optional type.
 func RenameFile(cfg *config.Config, fileUUID, newPlainName, newType string) error {
-	endpoint := cfg.DriveAPIURL + filesPath + "/" + fileUUID + "/meta"
+	endpoint := cfg.Endpoints.FileMeta(fileUUID)
 
 	payload := map[string]string{
 		"plainName": newPlainName,

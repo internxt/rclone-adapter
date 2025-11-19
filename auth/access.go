@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 
 	"crypto/sha1"
 
@@ -71,7 +70,7 @@ func AccessLogin(cfg *config.Config, lr *LoginResponse) (*AccessResponse, error)
 
 	b, _ := json.Marshal(req)
 
-	httpReq, err := http.NewRequest(http.MethodPost, cfg.DriveAPIURL+"/auth/login/access", bytes.NewReader(b))
+	httpReq, err := http.NewRequest(http.MethodPost, cfg.Endpoints.AuthLoginAccess(), bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +108,7 @@ func AccessLogin(cfg *config.Config, lr *LoginResponse) (*AccessResponse, error)
 }
 
 func AreCredentialsCorrect(cfg *config.Config, hashedPassword string) (bool, error) {
-	endpoint := fmt.Sprintf("%s/auth/are-credentials-correct?hashedPassword=%s", cfg.DriveAPIURL, url.QueryEscape(hashedPassword))
+	endpoint := cfg.Endpoints.AuthCredentialsCorrect(hashedPassword)
 
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {

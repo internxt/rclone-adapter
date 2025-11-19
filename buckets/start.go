@@ -3,15 +3,12 @@ package buckets
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/internxt/rclone-adapter/config"
 )
 
-const API = "https://api.internxt.com"
-
-// UploadPartSpec defines each part’s index and size for the start call
+// UploadPartSpec defines each part's index and size for the start call
 type UploadPartSpec struct {
 	Index int   `json:"index"`
 	Size  int64 `json:"size"`
@@ -33,7 +30,7 @@ type StartUploadResp struct {
 
 // StartUpload reserves all parts at once
 func StartUpload(cfg *config.Config, bucketID string, parts []UploadPartSpec) (*StartUploadResp, error) {
-	url := fmt.Sprintf("%s/v2/buckets/%s/files/start?multiparts=1", API, bucketID)
+	url := cfg.Endpoints.BucketStartUpload(bucketID) + "?multiparts=1"
 	reqBody := startUploadReq{Uploads: parts}
 	b, err := json.Marshal(reqBody)
 	if err != nil {

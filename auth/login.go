@@ -17,12 +17,12 @@ type LoginResponse struct {
 	HasECCKeys   bool   `json:"hasEccKeys"`
 }
 
-// Login calls {DRIVE_API_URL}/auth/login with {"email":…}
+// Login calls the auth login endpoint with {"email":…}
 func Login(cfg *config.Config) (*LoginResponse, error) {
 	payload := map[string]string{"email": cfg.Email}
 	b, _ := json.Marshal(payload)
 
-	req, err := http.NewRequest(http.MethodPost, cfg.DriveAPIURL+"/auth/login", bytes.NewReader(b))
+	req, err := http.NewRequest(http.MethodPost, cfg.Endpoints.AuthLogin(), bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}

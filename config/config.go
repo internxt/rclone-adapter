@@ -4,6 +4,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/internxt/rclone/endpoints"
 )
 
 const (
@@ -17,23 +19,24 @@ const (
 )
 
 type Config struct {
-	Email             string       `json:"email,omitempty"`
-	Password          string       `json:"password,omitempty"`
-	TFA               string       `json:"tfa,omitempty"`
-	Token             string       `json:"token,omitempty"`
-	RootFolderID      string       `json:"root_folder_id,omitempty"`
-	Bucket            string       `json:"bucket,omitempty"`
-	Mnemonic          string       `json:"mnemonic,omitempty"`
-	BasicAuthHeader   string       `json:"basic_auth_header,omitempty"`
-	DriveAPIURL       string       `json:"drive_api_url,omitempty"`
-	AuthAPIURL        string       `json:"auth_api_url,omitempty"`
-	UsersAPIURL       string       `json:"users_api_url,omitempty"`
-	AppCryptoSecret   string       `json:"app_crypto_secret,omitempty"`
-	AppCryptoSecret2  string       `json:"app_crypto_secret2,omitempty"`
-	AppMagicIV        string       `json:"app_magic_iv,omitempty"`
-	AppMagicSalt      string       `json:"app_magic_salt,omitempty"`
-	EncryptedPassword string       `json:"encrypted_password,omitempty"`
-	HTTPClient        *http.Client `json:"-"`
+	Email             string            `json:"email,omitempty"`
+	Password          string            `json:"password,omitempty"`
+	TFA               string            `json:"tfa,omitempty"`
+	Token             string            `json:"token,omitempty"`
+	RootFolderID      string            `json:"root_folder_id,omitempty"`
+	Bucket            string            `json:"bucket,omitempty"`
+	Mnemonic          string            `json:"mnemonic,omitempty"`
+	BasicAuthHeader   string            `json:"basic_auth_header,omitempty"`
+	DriveAPIURL       string            `json:"drive_api_url,omitempty"` // Deprecated: Use Endpoints instead
+	AuthAPIURL        string            `json:"auth_api_url,omitempty"`  // Deprecated: Use Endpoints instead
+	UsersAPIURL       string            `json:"users_api_url,omitempty"` // Deprecated: Use Endpoints instead
+	AppCryptoSecret   string            `json:"app_crypto_secret,omitempty"`
+	AppCryptoSecret2  string            `json:"app_crypto_secret2,omitempty"`
+	AppMagicIV        string            `json:"app_magic_iv,omitempty"`
+	AppMagicSalt      string            `json:"app_magic_salt,omitempty"`
+	EncryptedPassword string            `json:"encrypted_password,omitempty"`
+	HTTPClient        *http.Client      `json:"-"` // Centralized HTTP client with proper timeouts
+	Endpoints         *endpoints.Config `json:"-"` // Centralized API endpoint management
 }
 
 func NewDefault(email, password string) *Config {
@@ -87,6 +90,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.HTTPClient == nil {
 		c.HTTPClient = newHTTPClient()
+	}
+	if c.Endpoints == nil {
+		c.Endpoints = endpoints.Default()
 	}
 }
 

@@ -28,7 +28,7 @@ type FinishUploadResp struct {
 }
 
 func FinishUpload(cfg *config.Config, bucketID, index string, shards []Shard) (*FinishUploadResp, error) {
-	url := fmt.Sprintf("%s/v2/buckets/%s/files/finish", "https://api.internxt.com", bucketID)
+	url := cfg.Endpoints.BucketFinishUpload(bucketID)
 	payload := map[string]interface{}{
 		"index":  index,
 		"shards": shards,
