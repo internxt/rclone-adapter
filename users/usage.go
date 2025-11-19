@@ -22,7 +22,7 @@ func GetUsage(cfg *config.Config) (*UsageResponse, error) {
 	}
 
 	req.Header.Set("Authorization", "Bearer "+cfg.Token)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
