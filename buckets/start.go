@@ -30,7 +30,7 @@ type StartUploadResp struct {
 
 // StartUpload reserves all parts at once
 func StartUpload(cfg *config.Config, bucketID string, parts []UploadPartSpec) (*StartUploadResp, error) {
-	url := cfg.Endpoints.BucketStartUpload(bucketID) + "?multiparts=1"
+	url := cfg.Endpoints.Buckets().StartUpload(bucketID) + "?multiparts=1"
 	reqBody := startUploadReq{Uploads: parts}
 	b, err := json.Marshal(reqBody)
 	if err != nil {

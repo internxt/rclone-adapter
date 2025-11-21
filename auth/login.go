@@ -22,7 +22,7 @@ func Login(cfg *config.Config) (*LoginResponse, error) {
 	payload := map[string]string{"email": cfg.Email}
 	b, _ := json.Marshal(payload)
 
-	req, err := http.NewRequest(http.MethodPost, cfg.Endpoints.AuthLogin(), bytes.NewReader(b))
+	req, err := http.NewRequest(http.MethodPost, cfg.Endpoints.Drive().Auth().Login(), bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}

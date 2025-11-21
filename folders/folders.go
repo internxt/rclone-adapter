@@ -24,7 +24,7 @@ func CreateFolder(cfg *config.Config, reqBody CreateFolderRequest) (*Folder, err
 		reqBody.ModificationTime = now
 	}
 
-	endpoint := cfg.Endpoints.FolderCreate()
+	endpoint := cfg.Endpoints.Drive().Folders().Create()
 	b, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, err
@@ -58,7 +58,7 @@ func CreateFolder(cfg *config.Config, reqBody CreateFolderRequest) (*Folder, err
 
 // DeleteFolders deletes a folder by UUID
 func DeleteFolder(cfg *config.Config, uuid string) error {
-	u, err := url.Parse(cfg.Endpoints.FolderCreate() + "/" + uuid)
+	u, err := url.Parse(cfg.Endpoints.Drive().Folders().Delete(uuid))
 	if err != nil {
 		return err
 	}
@@ -85,7 +85,7 @@ func DeleteFolder(cfg *config.Config, uuid string) error {
 // ListFolders lists child folders under the given parent UUID.
 // Returns a slice of folders or error otherwise
 func ListFolders(cfg *config.Config, parentUUID string, opts ListOptions) ([]Folder, error) {
-	base := cfg.Endpoints.FolderContentFolders(parentUUID)
+	base := cfg.Endpoints.Drive().Folders().ContentFolders(parentUUID)
 	u, err := url.Parse(base)
 	if err != nil {
 		return nil, err
@@ -143,7 +143,7 @@ func ListFolders(cfg *config.Config, parentUUID string, opts ListOptions) ([]Fol
 // ListFiles lists files under the given parent folder UUID.
 // Returns a slice of files or error otherwise
 func ListFiles(cfg *config.Config, parentUUID string, opts ListOptions) ([]File, error) {
-	base := cfg.Endpoints.FolderContentFiles(parentUUID)
+	base := cfg.Endpoints.Drive().Folders().ContentFiles(parentUUID)
 	u, err := url.Parse(base)
 	if err != nil {
 		return nil, err
