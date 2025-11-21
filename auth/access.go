@@ -17,7 +17,7 @@ import (
 
 	"crypto/sha1"
 
-	"github.com/StarHack/go-internxt-drive/config"
+	"github.com/internxt/rclone-adapter/config"
 
 	"golang.org/x/crypto/pbkdf2"
 )

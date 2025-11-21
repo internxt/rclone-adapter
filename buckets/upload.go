@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/StarHack/go-internxt-drive/config"
+	"github.com/internxt/rclone-adapter/config"
 )
 
 func UploadFile(cfg *config.Config, filePath, targetFolderUUID string, modTime time.Time) (*CreateMetaResponse, error) {

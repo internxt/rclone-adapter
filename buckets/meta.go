@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/StarHack/go-internxt-drive/config"
+	"github.com/internxt/rclone-adapter/config"
 )
 
 type CreateMetaRequest struct {

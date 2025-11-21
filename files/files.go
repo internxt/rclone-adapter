@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/StarHack/go-internxt-drive/config"
-	"github.com/StarHack/go-internxt-drive/folders"
+	"github.com/internxt/rclone-adapter/config"
+	"github.com/internxt/rclone-adapter/folders"
 )
 
 const filesPath = "/files"

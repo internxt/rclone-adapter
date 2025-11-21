@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/StarHack/go-internxt-drive/config"
+	"github.com/internxt/rclone-adapter/config"
 )
 
 const bucketAPIBase = "https://api.internxt.com"

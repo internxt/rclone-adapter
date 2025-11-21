@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/StarHack/go-internxt-drive/config"
+	"github.com/internxt/rclone-adapter/config"
 )
 
 const workspacesPath = "/workspaces"

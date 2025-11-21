@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/StarHack/go-internxt-drive/config"
+	"github.com/internxt/rclone-adapter/config"
 )
 
 // Logout calls GET {DRIVE_API_URL}/logout to end the session.

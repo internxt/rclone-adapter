@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/StarHack/go-internxt-drive/config"
+	"github.com/internxt/rclone-adapter/config"
 )
 
 const foldersPath = "/folders"

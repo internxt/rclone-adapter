@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/StarHack/go-internxt-drive/config"
+	"github.com/internxt/rclone-adapter/config"
 )
 
 type Shard struct {

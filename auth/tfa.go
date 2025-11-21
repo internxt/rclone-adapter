@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/StarHack/go-internxt-drive/config"
+	"github.com/internxt/rclone-adapter/config"
 )
 
 type TFAEnableRequest struct {
