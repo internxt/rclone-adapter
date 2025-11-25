@@ -12,9 +12,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/StarHack/go-internxt-drive/auth"
-	"github.com/StarHack/go-internxt-drive/config"
-	"github.com/StarHack/go-internxt-drive/users"
+	"github.com/internxt/rclone-adapter/auth"
+	"github.com/internxt/rclone-adapter/config"
+	"github.com/internxt/rclone-adapter/users"
 )
 
 func main() {
@@ -38,9 +38,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/StarHack/go-internxt-drive/auth"
-	"github.com/StarHack/go-internxt-drive/config"
-	"github.com/StarHack/go-internxt-drive/users"
+	"github.com/internxt/rclone-adapter/auth"
+	"github.com/internxt/rclone-adapter/config"
+	"github.com/internxt/rclone-adapter/users"
 )
 
 func main() {
@@ -100,8 +100,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/StarHack/go-internxt-drive/config"
-	"github.com/StarHack/go-internxt-drive/users"
+	"github.com/internxt/rclone-adapter/config"
+	"github.com/internxt/rclone-adapter/users"
 )
 
 func main() {
