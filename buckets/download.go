@@ -35,7 +35,7 @@ type BucketFileInfo struct {
 
 // GetBucketFileInfo calls the correct /info endpoint and parses its JSON.
 func GetBucketFileInfo(cfg *config.Config, bucketID, fileID string) (*BucketFileInfo, error) {
-	url := cfg.Endpoints.Buckets().FileInfo(bucketID, fileID)
+	url := cfg.Endpoints.Network().FileInfo(bucketID, fileID)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err

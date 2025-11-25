@@ -28,7 +28,7 @@ type FinishUploadResp struct {
 }
 
 func FinishUpload(cfg *config.Config, bucketID, index string, shards []Shard) (*FinishUploadResp, error) {
-	url := cfg.Endpoints.Buckets().FinishUpload(bucketID)
+	url := cfg.Endpoints.Network().FinishUpload(bucketID)
 	payload := map[string]interface{}{
 		"index":  index,
 		"shards": shards,

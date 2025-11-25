@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-	
 )
 
 // Config holds the base URL configuration for all API endpoints
@@ -36,9 +35,13 @@ func (c *Config) Drive() *DriveEndpoints {
 	return &DriveEndpoints{base: c.driveURL()}
 }
 
-// Buckets returns a BucketEndpoints helper for /buckets/* endpoints
-func (c *Config) Buckets() *BucketEndpoints {
-	return &BucketEndpoints{base: c.BaseURL}
+func (c *Config) networkURL() string {
+	return c.BaseURL + "/network"
+}
+
+// Network returns a NetworkEndpoints helper for /network/* endpoints
+func (c *Config) Network() *NetworkEndpoints {
+	return &NetworkEndpoints{base: c.networkURL()}
 }
 
 // DriveEndpoints provides endpoints under /drive
@@ -100,27 +103,29 @@ type FileEndpoints struct {
 	base string
 }
 
-func (f *FileEndpoints) Create() string              { return f.base }
-func (f *FileEndpoints) Recents() string             { return f.base + "/recents" }
-func (f *FileEndpoints) Meta(uuid string) string     { return f.base + "/" + uuid + "/meta" }
-func (f *FileEndpoints) Delete(uuid string) string   { return f.base + "/" + uuid }
-func (f *FileEndpoints) Move(uuid string) string     { return f.base + "/" + uuid }
-func (f *FileEndpoints) ByUUID(uuid string) string   { return f.base + "/" + uuid }
+func (f *FileEndpoints) Create() string            { return f.base }
+func (f *FileEndpoints) Recents() string           { return f.base + "/recents" }
+func (f *FileEndpoints) Meta(uuid string) string   { return f.base + "/" + uuid + "/meta" }
+func (f *FileEndpoints) Delete(uuid string) string { return f.base + "/" + uuid }
+func (f *FileEndpoints) Move(uuid string) string   { return f.base + "/" + uuid }
+func (f *FileEndpoints) ByUUID(uuid string) string { return f.base + "/" + uuid }
 
 // FolderEndpoints : endpoints under /drive/folders
 type FolderEndpoints struct {
 	base string
 }
 
-func (f *FolderEndpoints) Create() string                    { return f.base }
-func (f *FolderEndpoints) Delete(uuid string) string         { return f.base + "/" + uuid }
-func (f *FolderEndpoints) Size(uuid string) string           { return f.base + "/" + uuid + "/size" }
-func (f *FolderEndpoints) Meta(uuid string) string           { return f.base + "/" + uuid + "/meta" }
-func (f *FolderEndpoints) Move(uuid string) string           { return f.base + "/" + uuid }
-func (f *FolderEndpoints) Tree(uuid string) string           { return f.base + "/" + uuid + "/tree" }
-func (f *FolderEndpoints) Ancestors(uuid string) string      { return f.base + "/" + uuid + "/ancestors" }
-func (f *FolderEndpoints) MetadataByID(id int64) string      { return fmt.Sprintf("%s/%d/metadata", f.base, id) }
-func (f *FolderEndpoints) ByUUID(uuid string) string         { return f.base + "/" + uuid }
+func (f *FolderEndpoints) Create() string               { return f.base }
+func (f *FolderEndpoints) Delete(uuid string) string    { return f.base + "/" + uuid }
+func (f *FolderEndpoints) Size(uuid string) string      { return f.base + "/" + uuid + "/size" }
+func (f *FolderEndpoints) Meta(uuid string) string      { return f.base + "/" + uuid + "/meta" }
+func (f *FolderEndpoints) Move(uuid string) string      { return f.base + "/" + uuid }
+func (f *FolderEndpoints) Tree(uuid string) string      { return f.base + "/" + uuid + "/tree" }
+func (f *FolderEndpoints) Ancestors(uuid string) string { return f.base + "/" + uuid + "/ancestors" }
+func (f *FolderEndpoints) MetadataByID(id int64) string {
+	return fmt.Sprintf("%s/%d/metadata", f.base, id)
+}
+func (f *FolderEndpoints) ByUUID(uuid string) string { return f.base + "/" + uuid }
 
 func (f *FolderEndpoints) MetadataByPath(path string) string {
 	return fmt.Sprintf("%s/meta?path=%s", f.base, url.QueryEscape(path))
@@ -139,13 +144,15 @@ type TrashEndpoints struct {
 	base string
 }
 
-func (t *TrashEndpoints) Paginated() string                 { return t.base + "/paginated" }
-func (t *TrashEndpoints) Add() string                       { return t.base + "/add" }
-func (t *TrashEndpoints) DeleteAll() string                 { return t.base + "/all" }
-func (t *TrashEndpoints) DeleteAllRequest() string          { return t.base + "/all/request" }
-func (t *TrashEndpoints) DeleteItems() string               { return t.base }
-func (t *TrashEndpoints) DeleteFile(fileID string) string   { return t.base + "/file/" + fileID }
-func (t *TrashEndpoints) DeleteFolder(folderID int64) string { return fmt.Sprintf("%s/folder/%d", t.base, folderID) }
+func (t *TrashEndpoints) Paginated() string               { return t.base + "/paginated" }
+func (t *TrashEndpoints) Add() string                     { return t.base + "/add" }
+func (t *TrashEndpoints) DeleteAll() string               { return t.base + "/all" }
+func (t *TrashEndpoints) DeleteAllRequest() string        { return t.base + "/all/request" }
+func (t *TrashEndpoints) DeleteItems() string             { return t.base }
+func (t *TrashEndpoints) DeleteFile(fileID string) string { return t.base + "/file/" + fileID }
+func (t *TrashEndpoints) DeleteFolder(folderID int64) string {
+	return fmt.Sprintf("%s/folder/%d", t.base, folderID)
+}
 
 // UserEndpoints : endpoints under /users
 type UserEndpoints struct {
@@ -155,20 +162,19 @@ type UserEndpoints struct {
 func (u *UserEndpoints) Usage() string { return u.base + "/usage" }
 func (u *UserEndpoints) Limit() string { return u.base + "/limit" }
 
-
-// BucketEndpoints : endpoints under /buckets and /v2/buckets
-type BucketEndpoints struct {
+// NetworkEndpoints : endpoints under /buckets and /v2/buckets
+type NetworkEndpoints struct {
 	base string
 }
 
-func (b *BucketEndpoints) FileInfo(bucketID, fileID string) string {
+func (b *NetworkEndpoints) FileInfo(bucketID, fileID string) string {
 	return fmt.Sprintf("%s/buckets/%s/files/%s/info", b.base, bucketID, fileID)
 }
 
-func (b *BucketEndpoints) StartUpload(bucketID string) string {
+func (b *NetworkEndpoints) StartUpload(bucketID string) string {
 	return fmt.Sprintf("%s/v2/buckets/%s/files/start", b.base, bucketID)
 }
 
-func (b *BucketEndpoints) FinishUpload(bucketID string) string {
+func (b *NetworkEndpoints) FinishUpload(bucketID string) string {
 	return fmt.Sprintf("%s/v2/buckets/%s/files/finish", b.base, bucketID)
 }
