@@ -31,6 +31,13 @@ type multipartUploadState struct {
 	uuid           string
 }
 
+// encryptedChunk represents a chunk that has been encrypted and is ready for upload
+type encryptedChunk struct {
+	index int
+	data  []byte
+	err   error
+}
+
 // uploadResult holds the result of a single chunk upload
 type uploadResult struct {
 	index int
@@ -96,14 +103,9 @@ func (s *multipartUploadState) executeMultipartUpload(reader io.Reader) (*Multip
 	s.uploadId = uploadInfo.UploadId
 	s.uuid = uploadInfo.UUID
 
-	encryptedChunks, err := s.encryptAllChunks(reader)
+	completedParts, overallHash, err := s.encryptAndUploadPipelined(reader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt chunks: %w", err)
-	}
-
-	completedParts, overallHash, err := s.uploadConcurrently(encryptedChunks)
-	if err != nil {
-		return nil, fmt.Errorf("failed to upload chunks: %w", err)
+		return nil, fmt.Errorf("failed to encrypt and upload chunks: %w", err)
 	}
 
 	return &MultipartShard{
@@ -114,55 +116,79 @@ func (s *multipartUploadState) executeMultipartUpload(reader io.Reader) (*Multip
 	}, nil
 }
 
-// encryptAllChunks reads and encrypts all chunks sequentially using the single cipher instance
-func (s *multipartUploadState) encryptAllChunks(reader io.Reader) ([][]byte, error) {
-	encryptedChunks := make([][]byte, s.numParts)
+// encryptAndUploadPipelined encrypts chunks and uploads them concurrently
+func (s *multipartUploadState) encryptAndUploadPipelined(reader io.Reader) ([]CompletedPart, string, error) {
+	chunkChan := make(chan encryptedChunk, s.maxConcurrency)
 
-	for i := int64(0); i < s.numParts; i++ {
-		chunkSize := s.chunkSize
-		if i == s.numParts-1 {
-			chunkSize = s.totalSize - (i * s.chunkSize)
-		}
+	var uploadWg sync.WaitGroup
 
-		plainChunk := make([]byte, chunkSize)
-		n, err := io.ReadFull(reader, plainChunk)
-		if err != nil && err != io.ErrUnexpectedEOF {
-			return nil, fmt.Errorf("failed to read chunk %d: %w", i, err)
-		}
-		plainChunk = plainChunk[:n]
-
-		encryptedChunk := make([]byte, len(plainChunk))
-		s.cipher.XORKeyStream(encryptedChunk, plainChunk)
-
-		encryptedChunks[i] = encryptedChunk
-	}
-
-	return encryptedChunks, nil
-}
-
-// uploadConcurrently uploads all encrypted chunks with controlled concurrency
-// Returns completed parts, overall hash, and any error
-func (s *multipartUploadState) uploadConcurrently(encryptedChunks [][]byte) ([]CompletedPart, string, error) {
-	semaphore := make(chan struct{}, s.maxConcurrency)
 	results := make(chan uploadResult, s.numParts)
 
-	var wg sync.WaitGroup
-	for i := 0; i < len(encryptedChunks); i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
+	semaphore := make(chan struct{}, s.maxConcurrency)
+
+	overallHasher := sha1.New()
+	var hashMutex sync.Mutex
+	var encryptErr error
+
+	// Start encryption goroutine
+	go func() {
+		defer close(chunkChan)
+
+		for i := int64(0); i < s.numParts; i++ {
+			chunkSize := s.chunkSize
+			if i == s.numParts-1 {
+				chunkSize = s.totalSize - (i * s.chunkSize)
+			}
+
+			plainChunk := make([]byte, chunkSize)
+			n, err := io.ReadFull(reader, plainChunk)
+			if err != nil && err != io.ErrUnexpectedEOF {
+				encryptErr = fmt.Errorf("failed to read chunk %d: %w", i, err)
+				chunkChan <- encryptedChunk{index: int(i), err: encryptErr}
+				return
+			}
+			plainChunk = plainChunk[:n]
+
+			encryptedData := make([]byte, len(plainChunk))
+			s.cipher.XORKeyStream(encryptedData, plainChunk)
+
+			overallHasher.Write(encryptedData)
+
+			chunkChan <- encryptedChunk{
+				index: int(i),
+				data:  encryptedData,
+				err:   nil,
+			}
+		}
+	}()
+
+	// Start upload workers
+	for chunk := range chunkChan {
+		if chunk.err != nil {
+			for range chunkChan {
+			}
+			return nil, "", chunk.err
+		}
+
+		uploadWg.Add(1)
+		go func(ch encryptedChunk) {
+			defer uploadWg.Done()
 
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			etag, err := s.uploadChunkWithRetry(idx, encryptedChunks[idx])
+			etag, err := s.uploadChunkWithRetry(ch.index, ch.data)
 
-			results <- uploadResult{index: idx, etag: etag, err: err}
-		}(i)
+			results <- uploadResult{
+				index: ch.index,
+				etag:  etag,
+				err:   err,
+			}
+		}(chunk)
 	}
 
 	go func() {
-		wg.Wait()
+		uploadWg.Wait()
 		close(results)
 	}()
 
@@ -183,17 +209,13 @@ func (s *multipartUploadState) uploadConcurrently(encryptedChunks [][]byte) ([]C
 		}
 	}
 
-	fmt.Printf("DEBUG uploadConcurrently: Results collection complete. FirstError=%v\n", firstError)
-
 	if firstError != nil {
 		return nil, "", firstError
 	}
 
-	overallHasher := sha1.New()
-	for _, chunk := range encryptedChunks {
-		overallHasher.Write(chunk)
-	}
+	hashMutex.Lock()
 	overallHash := hex.EncodeToString(overallHasher.Sum(nil))
+	hashMutex.Unlock()
 
 	return parts, overallHash, nil
 }
