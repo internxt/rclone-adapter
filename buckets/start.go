@@ -21,10 +21,11 @@ type startUploadReq struct {
 }
 
 type UploadPart struct {
-	Index int      `json:"index"`
-	UUID  string   `json:"uuid"`
-	URL   string   `json:"url"` 
-	URLs  []string `json:"urls"`
+	Index    int      `json:"index"`
+	UUID     string   `json:"uuid"`
+	URL      string   `json:"url"`
+	URLs     []string `json:"urls"`
+	UploadId string   `json:"UploadId"`
 }
 
 type StartUploadResp struct {
@@ -69,6 +70,48 @@ func StartUpload(cfg *config.Config, bucketID string, parts []UploadPartSpec) (*
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("start upload failed: status %d, %s", resp.StatusCode, string(body))
+	}
+
+	var result StartUploadResp
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	return &result, nil
+}
+
+// StartUploadMultipart starts a multipart upload session with explicit part count
+func StartUploadMultipart(cfg *config.Config, bucketID string, parts []UploadPartSpec, numParts int) (*StartUploadResp, error) {
+	url := cfg.Endpoints.Network().StartUpload(bucketID)
+	url += fmt.Sprintf("?multiparts=%d", numParts)
+	reqBody := startUploadReq{Uploads: parts}
+	b, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewReader(b))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", cfg.BasicAuthHeader)
+	req.Header.Set("internxt-version", "1.0")
+	req.Header.Set("internxt-client", "rclone") // TODO: define this ?
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+
+	resp, err := cfg.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("start multipart upload failed: status %d, %s", resp.StatusCode, string(body))
 	}
 
 	var result StartUploadResp

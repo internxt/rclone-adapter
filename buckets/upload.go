@@ -50,7 +50,11 @@ func UploadFile(cfg *config.Config, filePath, targetFolderUUID string, modTime t
 		return nil, err
 	}
 	part := startResp.Uploads[0]
-	if err := Transfer(cfg, part, r, plainSize); err != nil {
+	uploadURL := part.URL
+	if len(part.URLs) > 0 {
+		uploadURL = part.URLs[0]
+	}
+	if _, err := Transfer(cfg, uploadURL, r, plainSize); err != nil {
 		return nil, err
 	}
 	encIndex := hex.EncodeToString(ph[:])
@@ -106,8 +110,12 @@ func UploadFileStream(cfg *config.Config, targetFolderUUID, fileName string, in 
 	}
 
 	part := startResp.Uploads[0]
+	uploadURL := part.URL
+	if len(part.URLs) > 0 {
+		uploadURL = part.URLs[0]
+	}
 
-	if err := Transfer(cfg, part, r, plainSize); err != nil {
+	if _, err := Transfer(cfg, uploadURL, r, plainSize); err != nil {
 		return nil, err
 	}
 
@@ -136,12 +144,12 @@ func UploadFileStreamMultipart(cfg *config.Config, targetFolderUUID, fileName st
 		return nil, err
 	}
 
-	shards, err := state.executeMultipartUpload(in)
+	shard, err := state.executeMultipartUpload(in)
 	if err != nil {
 		return nil, err
 	}
 
-	finishResp, err := FinishUpload(cfg, cfg.Bucket, state.encIndex, shards)
+	finishResp, err := FinishMultipartUpload(cfg, cfg.Bucket, state.encIndex, *shard)
 	if err != nil {
 		return nil, err
 	}
