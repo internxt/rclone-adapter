@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/internxt/rclone-adapter/config"
@@ -20,9 +21,10 @@ type startUploadReq struct {
 }
 
 type UploadPart struct {
-	Index int    `json:"index"`
-	UUID  string `json:"uuid"`
-	URL   string `json:"url"`
+	Index int      `json:"index"`
+	UUID  string   `json:"uuid"`
+	URL   string   `json:"url"` 
+	URLs  []string `json:"urls"`
 }
 
 type StartUploadResp struct {
@@ -38,6 +40,7 @@ func StartUpload(cfg *config.Config, bucketID string, parts []UploadPartSpec) (*
 	if err != nil {
 		return nil, err
 	}
+
 	req, err := http.NewRequest("POST", url, bytes.NewReader(b))
 	if err != nil {
 		return nil, err
@@ -47,15 +50,31 @@ func StartUpload(cfg *config.Config, bucketID string, parts []UploadPartSpec) (*
 	req.Header.Set("internxt-client", "drive-web")
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 
+	// DEBUG: Print headers (without exposing full auth token)
+	fmt.Printf("DEBUG StartUpload: Headers set - Content-Type=%s, internxt-version=%s, internxt-client=%s\n",
+		req.Header.Get("Content-Type"), req.Header.Get("internxt-version"), req.Header.Get("internxt-client"))
+	if cfg.BasicAuthHeader != "" {
+	}
+
 	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	var result StartUploadResp
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("start upload failed: status %d, %s", resp.StatusCode, string(body))
+	}
+
+	var result StartUploadResp
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
 	return &result, nil
 }

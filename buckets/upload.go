@@ -127,3 +127,40 @@ func UploadFileStream(cfg *config.Config, targetFolderUUID, fileName string, in 
 	}
 	return meta, nil
 }
+
+// UploadFileStreamMultipart uploads data from an io.Reader using multipart upload.
+// This is intended for large files (>100MB) and splits the file into multiple chunks
+func UploadFileStreamMultipart(cfg *config.Config, targetFolderUUID, fileName string, in io.Reader, plainSize int64, modTime time.Time) (*CreateMetaResponse, error) {
+	state, err := newMultipartUploadState(cfg, plainSize)
+	if err != nil {
+		return nil, err
+	}
+
+	shards, err := state.executeMultipartUpload(in)
+	if err != nil {
+		return nil, err
+	}
+
+	finishResp, err := FinishUpload(cfg, cfg.Bucket, state.encIndex, shards)
+	if err != nil {
+		return nil, err
+	}
+
+	base := filepath.Base(fileName)
+	name := strings.TrimSuffix(base, filepath.Ext(base))
+	ext := strings.TrimPrefix(filepath.Ext(base), ".")
+	meta, err := CreateMetaFile(cfg, name, cfg.Bucket, finishResp.ID, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
+	if err != nil {
+		return nil, err
+	}
+
+	return meta, nil
+}
+
+// UploadFileStreamAuto automatically chooses between single-part and multipart upload
+func UploadFileStreamAuto(cfg *config.Config, targetFolderUUID, fileName string, in io.Reader, plainSize int64, modTime time.Time) (*CreateMetaResponse, error) {
+	if plainSize >= config.DefaultMultipartMinSize {
+		return UploadFileStreamMultipart(cfg, targetFolderUUID, fileName, in, plainSize, modTime)
+	}
+	return UploadFileStream(cfg, targetFolderUUID, fileName, in, plainSize, modTime)
+}

@@ -9,7 +9,16 @@ import (
 )
 
 func Transfer(cfg *config.Config, part UploadPart, r io.Reader, size int64) error {
-	req, err := http.NewRequest("PUT", part.URL, r)
+	uploadURL := ""
+	if len(part.URLs) > part.Index {
+		uploadURL = part.URLs[part.Index]
+	} else if part.URL != "" {
+		uploadURL = part.URL
+	} else {
+		return fmt.Errorf("no upload URL provided for part index %d", part.Index)
+	}
+
+	req, err := http.NewRequest("PUT", uploadURL, r)
 	if err != nil {
 		return err
 	}
