@@ -13,9 +13,7 @@ import (
 	"github.com/internxt/rclone-adapter/config"
 )
 
-const foldersPath = "/folders"
-
-// CreateFolder calls {DriveAPIURL}/folders with authorization.
+// CreateFolder calls the folder creation endpoint with authorization.
 // It auto‑fills CreationTime/ModificationTime if empty, checks status, and returns the newly created Folder.
 func CreateFolder(cfg *config.Config, reqBody CreateFolderRequest) (*Folder, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -26,7 +24,7 @@ func CreateFolder(cfg *config.Config, reqBody CreateFolderRequest) (*Folder, err
 		reqBody.ModificationTime = now
 	}
 
-	endpoint := cfg.DriveAPIURL + foldersPath
+	endpoint := cfg.Endpoints.Drive().Folders().Create()
 	b, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, err
@@ -60,7 +58,7 @@ func CreateFolder(cfg *config.Config, reqBody CreateFolderRequest) (*Folder, err
 
 // DeleteFolders deletes a folder by UUID
 func DeleteFolder(cfg *config.Config, uuid string) error {
-	u, err := url.Parse(cfg.DriveAPIURL + foldersPath + "/" + uuid)
+	u, err := url.Parse(cfg.Endpoints.Drive().Folders().Delete(uuid))
 	if err != nil {
 		return err
 	}
@@ -87,7 +85,7 @@ func DeleteFolder(cfg *config.Config, uuid string) error {
 // ListFolders lists child folders under the given parent UUID.
 // Returns a slice of folders or error otherwise
 func ListFolders(cfg *config.Config, parentUUID string, opts ListOptions) ([]Folder, error) {
-	base := fmt.Sprintf("%s%s/content/%s/folders", cfg.DriveAPIURL, foldersPath, parentUUID)
+	base := cfg.Endpoints.Drive().Folders().ContentFolders(parentUUID)
 	u, err := url.Parse(base)
 	if err != nil {
 		return nil, err
@@ -145,7 +143,7 @@ func ListFolders(cfg *config.Config, parentUUID string, opts ListOptions) ([]Fol
 // ListFiles lists files under the given parent folder UUID.
 // Returns a slice of files or error otherwise
 func ListFiles(cfg *config.Config, parentUUID string, opts ListOptions) ([]File, error) {
-	base := fmt.Sprintf("%s%s/content/%s/files", cfg.DriveAPIURL, foldersPath, parentUUID)
+	base := cfg.Endpoints.Drive().Folders().ContentFiles(parentUUID)
 	u, err := url.Parse(base)
 	if err != nil {
 		return nil, err

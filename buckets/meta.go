@@ -39,7 +39,7 @@ type CreateMetaResponse struct {
 }
 
 func CreateMetaFile(cfg *config.Config, name, bucketID, fileID, encryptVersion, folderUuid, plainName, fileType string, size int64, modTime time.Time) (*CreateMetaResponse, error) {
-	url := "https://api.internxt.com/drive/files"
+	url := cfg.Endpoints.Drive().Files().Create()
 	reqBody := CreateMetaRequest{
 		Name:             name,
 		Bucket:           bucketID,
