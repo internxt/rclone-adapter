@@ -12,8 +12,6 @@ import (
 	"github.com/internxt/rclone-adapter/config"
 )
 
-const bucketAPIBase = "https://api.internxt.com"
-
 // ShardInfo mirrors the per‑shard info returned by /files/{fileID}/info
 type ShardInfo struct {
 	Index int    `json:"index"`
@@ -37,7 +35,7 @@ type BucketFileInfo struct {
 
 // GetBucketFileInfo calls the correct /info endpoint and parses its JSON.
 func GetBucketFileInfo(cfg *config.Config, bucketID, fileID string) (*BucketFileInfo, error) {
-	url := fmt.Sprintf("%s/buckets/%s/files/%s/info", bucketAPIBase, bucketID, fileID)
+	url := cfg.Endpoints.Network().FileInfo(bucketID, fileID)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
