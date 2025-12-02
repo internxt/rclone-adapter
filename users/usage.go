@@ -15,7 +15,7 @@ type UsageResponse struct {
 
 // GetUsage calls GET {DRIVE_API_URL}/users/usage and returns the account's current usage in bytes.
 func GetUsage(cfg *config.Config) (*UsageResponse, error) {
-	url := fmt.Sprintf("%s/users/usage", cfg.DriveAPIURL)
+	url := cfg.Endpoints.Drive().Users().Usage()
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err

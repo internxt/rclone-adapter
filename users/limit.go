@@ -15,7 +15,7 @@ type LimitResponse struct {
 
 // GetLimit calls {DRIVE_API_URL}/users/limit and returns the maximum available storage of the account.
 func GetLimit(cfg *config.Config) (*LimitResponse, error) {
-	url := fmt.Sprintf("%s/users/limit", cfg.DriveAPIURL)
+	url := cfg.Endpoints.Drive().Users().Limit()
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
