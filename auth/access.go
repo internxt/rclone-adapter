@@ -2,6 +2,7 @@ package auth
 
 import (
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/md5"
@@ -12,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 
 	"crypto/sha1"
@@ -208,4 +210,40 @@ func encryptTextWithKey(plaintext, secret string) (string, error) {
 	out := append([]byte("Salted__"), salt...)
 	out = append(out, ct...)
 	return hex.EncodeToString(out), nil
+}
+
+func RefreshToken(ctx context.Context, cfg *config.Config) (*AccessResponse, error) {
+	endpoint := cfg.Endpoints.Drive().Users().Refresh()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+cfg.Token)
+
+	resp, err := cfg.HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read refresh response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("refresh token failed with status %d", resp.StatusCode)
+	}
+
+	var ar AccessResponse
+	if err := json.Unmarshal(body, &ar); err != nil {
+		return nil, fmt.Errorf("failed to parse refresh response: %w", err)
+	}
+
+	if ar.NewToken == "" {
+		return nil, fmt.Errorf("refresh response missing newToken")
+	}
+
+	return &ar, nil
 }

@@ -150,6 +150,11 @@ func (u *UserEndpoints) Limit() string {
 	return path
 }
 
+func (u *UserEndpoints) Refresh() string {
+	path, _ := url.JoinPath(u.base, "/refresh")
+	return path
+}
+
 // NetworkEndpoints : endpoints under /buckets and /v2/buckets
 type NetworkEndpoints struct {
 	base string
