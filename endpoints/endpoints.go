@@ -28,7 +28,8 @@ func NewConfig(baseURL string) *Config {
 
 // driveURL returns the base drive API URL
 func (c *Config) driveURL() string {
-	return c.BaseURL + "/drive"
+	u, _ := url.JoinPath(c.BaseURL, "/drive")
+	return u
 }
 
 // Drive returns a DriveEndpoints helper for /drive/* endpoints
@@ -37,7 +38,8 @@ func (c *Config) Drive() *DriveEndpoints {
 }
 
 func (c *Config) networkURL() string {
-	return c.BaseURL + "/network"
+	u, _ := url.JoinPath(c.BaseURL, "/network")
+	return u
 }
 
 // Network returns a NetworkEndpoints helper for /network/* endpoints
@@ -52,22 +54,26 @@ type DriveEndpoints struct {
 
 // Auth returns auth-related endpoints
 func (d *DriveEndpoints) Auth() *AuthEndpoints {
-	return &AuthEndpoints{base: d.base + "/auth"}
+	base, _ := url.JoinPath(d.base, "/auth")
+	return &AuthEndpoints{base: base}
 }
 
 // Files returns file-related endpoints
 func (d *DriveEndpoints) Files() *FileEndpoints {
-	return &FileEndpoints{base: d.base + "/files"}
+	base, _ := url.JoinPath(d.base, "/files")
+	return &FileEndpoints{base: base}
 }
 
 // Folders returns folder-related endpoints
 func (d *DriveEndpoints) Folders() *FolderEndpoints {
-	return &FolderEndpoints{base: d.base + "/folders"}
+	base, _ := url.JoinPath(d.base, "/folders")
+	return &FolderEndpoints{base: base}
 }
 
 // Users returns user-related endpoints
 func (d *DriveEndpoints) Users() *UserEndpoints {
-	return &UserEndpoints{base: d.base + "/users"}
+	base, _ := url.JoinPath(d.base, "/users")
+	return &UserEndpoints{base: base}
 }
 
 // AuthEndpoints : endpoints under /drive/auth
@@ -75,11 +81,19 @@ type AuthEndpoints struct {
 	base string
 }
 
-func (a *AuthEndpoints) Login() string       { return a.base + "/login" }
-func (a *AuthEndpoints) LoginAccess() string { return a.base + "/login/access" }
+func (a *AuthEndpoints) Login() string {
+	u, _ := url.JoinPath(a.base, "/login")
+	return u
+}
+
+func (a *AuthEndpoints) LoginAccess() string {
+	u, _ := url.JoinPath(a.base, "/login/access")
+	return u
+}
 
 func (a *AuthEndpoints) CredentialsCorrect(hashedPassword string) string {
-	return fmt.Sprintf("%s/are-credentials-correct?hashedPassword=%s", a.base, url.QueryEscape(hashedPassword))
+	u, _ := url.JoinPath(a.base, "/are-credentials-correct")
+	return fmt.Sprintf("%s?hashedPassword=%s", u, url.QueryEscape(hashedPassword))
 }
 
 // FileEndpoints : endpoints under /drive/files
@@ -87,24 +101,38 @@ type FileEndpoints struct {
 	base string
 }
 
-func (f *FileEndpoints) Create() string            { return f.base }
-func (f *FileEndpoints) Meta(uuid string) string   { return f.base + "/" + uuid + "/meta" }
-func (f *FileEndpoints) Delete(uuid string) string { return f.base + "/" + uuid }
+func (f *FileEndpoints) Create() string { return f.base }
+
+func (f *FileEndpoints) Meta(uuid string) string {
+	u, _ := url.JoinPath(f.base, uuid, "/meta")
+	return u
+}
+
+func (f *FileEndpoints) Delete(uuid string) string {
+	u, _ := url.JoinPath(f.base, uuid)
+	return u
+}
 
 // FolderEndpoints : endpoints under /drive/folders
 type FolderEndpoints struct {
 	base string
 }
 
-func (f *FolderEndpoints) Create() string            { return f.base }
-func (f *FolderEndpoints) Delete(uuid string) string { return f.base + "/" + uuid }
+func (f *FolderEndpoints) Create() string { return f.base }
+
+func (f *FolderEndpoints) Delete(uuid string) string {
+	u, _ := url.JoinPath(f.base, uuid)
+	return u
+}
 
 func (f *FolderEndpoints) ContentFolders(parentUUID string) string {
-	return fmt.Sprintf("%s/content/%s/folders", f.base, parentUUID)
+	u, _ := url.JoinPath(f.base, "/content", parentUUID, "/folders")
+	return u
 }
 
 func (f *FolderEndpoints) ContentFiles(parentUUID string) string {
-	return fmt.Sprintf("%s/content/%s/files", f.base, parentUUID)
+	u, _ := url.JoinPath(f.base, "/content", parentUUID, "/files")
+	return u
 }
 
 // UserEndpoints : endpoints under /users
@@ -112,8 +140,15 @@ type UserEndpoints struct {
 	base string
 }
 
-func (u *UserEndpoints) Usage() string { return u.base + "/usage" }
-func (u *UserEndpoints) Limit() string { return u.base + "/limit" }
+func (u *UserEndpoints) Usage() string {
+	path, _ := url.JoinPath(u.base, "/usage")
+	return path
+}
+
+func (u *UserEndpoints) Limit() string {
+	path, _ := url.JoinPath(u.base, "/limit")
+	return path
+}
 
 // NetworkEndpoints : endpoints under /buckets and /v2/buckets
 type NetworkEndpoints struct {
@@ -121,13 +156,16 @@ type NetworkEndpoints struct {
 }
 
 func (b *NetworkEndpoints) FileInfo(bucketID, fileID string) string {
-	return fmt.Sprintf("%s/buckets/%s/files/%s/info", b.base, bucketID, fileID)
+	u, _ := url.JoinPath(b.base, "/buckets", bucketID, "/files", fileID, "/info")
+	return u
 }
 
 func (b *NetworkEndpoints) StartUpload(bucketID string) string {
-	return fmt.Sprintf("%s/v2/buckets/%s/files/start", b.base, bucketID)
+	u, _ := url.JoinPath(b.base, "/v2/buckets", bucketID, "/files/start")
+	return u
 }
 
 func (b *NetworkEndpoints) FinishUpload(bucketID string) string {
-	return fmt.Sprintf("%s/v2/buckets/%s/files/finish", b.base, bucketID)
+	u, _ := url.JoinPath(b.base, "/v2/buckets", bucketID, "/files/finish")
+	return u
 }
