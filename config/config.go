@@ -16,6 +16,9 @@ const (
 	DefaultAppCryptoSecret2 = "8Q8VMUE3BJZV87GT"
 	DefaultAppMagicIV       = "d139cb9a2cd17092e79e1861cf9d7023"
 	DefaultAppMagicSalt     = "38dce0391b49efba88dbc8c39ebf868f0267eb110bb0012ab27dc52a528d61b1d1ed9d76f400ff58e3240028442b1eab9bb84e111d9dadd997982dbde9dbd25e"
+	DefaultChunkSize        = 30 * 1024 * 1024
+	DefaultMultipartMinSize = 100 * 1024 * 1024
+	DefaultMaxConcurrency   = 6
 )
 
 type Config struct {
@@ -99,7 +102,7 @@ func (c *Config) applyDefaults() {
 // newHTTPClient: properly configured HTTP client with sensible timeouts
 func newHTTPClient() *http.Client {
 	return &http.Client{
-		Timeout: 60 * time.Second,
+		Timeout: 5 * time.Minute,
 		Transport: &http.Transport{
 			MaxIdleConns:        100,
 			MaxIdleConnsPerHost: 10,
