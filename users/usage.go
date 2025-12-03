@@ -1,6 +1,7 @@
 package users
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -14,9 +15,9 @@ type UsageResponse struct {
 }
 
 // GetUsage calls GET {DRIVE_API_URL}/users/usage and returns the account's current usage in bytes.
-func GetUsage(cfg *config.Config) (*UsageResponse, error) {
+func GetUsage(ctx context.Context, cfg *config.Config) (*UsageResponse, error) {
 	url := cfg.Endpoints.Drive().Users().Usage()
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}

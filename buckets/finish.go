@@ -2,6 +2,7 @@ package buckets
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -41,7 +42,7 @@ type FinishUploadResp struct {
 	Filename string `json:"filename"`
 }
 
-func FinishUpload(cfg *config.Config, bucketID, index string, shards []Shard) (*FinishUploadResp, error) {
+func FinishUpload(ctx context.Context, cfg *config.Config, bucketID, index string, shards []Shard) (*FinishUploadResp, error) {
 	url := cfg.Endpoints.Network().FinishUpload(bucketID)
 	payload := map[string]interface{}{
 		"index":  index,
@@ -51,7 +52,7 @@ func FinishUpload(cfg *config.Config, bucketID, index string, shards []Shard) (*
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest("POST", url, bytes.NewReader(b))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +85,7 @@ func FinishUpload(cfg *config.Config, bucketID, index string, shards []Shard) (*
 }
 
 // FinishMultipartUpload completes a multipart upload session
-func FinishMultipartUpload(cfg *config.Config, bucketID, index string, shard MultipartShard) (*FinishUploadResp, error) {
+func FinishMultipartUpload(ctx context.Context, cfg *config.Config, bucketID, index string, shard MultipartShard) (*FinishUploadResp, error) {
 	url := cfg.Endpoints.Network().FinishUpload(bucketID)
 	payload := map[string]any{
 		"index":  index,
@@ -95,7 +96,7 @@ func FinishMultipartUpload(cfg *config.Config, bucketID, index string, shard Mul
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewReader(b))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}

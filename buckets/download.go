@@ -1,6 +1,7 @@
 package buckets
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -34,9 +35,9 @@ type BucketFileInfo struct {
 }
 
 // GetBucketFileInfo calls the correct /info endpoint and parses its JSON.
-func GetBucketFileInfo(cfg *config.Config, bucketID, fileID string) (*BucketFileInfo, error) {
+func GetBucketFileInfo(ctx context.Context, cfg *config.Config, bucketID, fileID string) (*BucketFileInfo, error) {
 	url := cfg.Endpoints.Network().FileInfo(bucketID, fileID)
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -62,9 +63,9 @@ func GetBucketFileInfo(cfg *config.Config, bucketID, fileID string) (*BucketFile
 }
 
 // DownloadFile downloads and decrypts the first shard of the given file.
-func DownloadFile(cfg *config.Config, fileID, destPath string) error {
+func DownloadFile(ctx context.Context, cfg *config.Config, fileID, destPath string) error {
 	// 1) fetch file info from the bucket API
-	info, err := GetBucketFileInfo(cfg, cfg.Bucket, fileID)
+	info, err := GetBucketFileInfo(ctx, cfg, cfg.Bucket, fileID)
 	if err != nil {
 		return err
 	}
@@ -80,7 +81,7 @@ func DownloadFile(cfg *config.Config, fileID, destPath string) error {
 	}
 
 	// 3) GET the encrypted shard directly from its presigned URL
-	req, err := http.NewRequest("GET", shard.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", shard.URL, nil)
 	if err != nil {
 		return err
 	}
@@ -116,14 +117,14 @@ func DownloadFile(cfg *config.Config, fileID, destPath string) error {
 // DownloadFileStream returns a ReadCloser that streams the decrypted contents
 // of the file with the given UUID. The caller must close the returned ReadCloser.
 // It takes an optional range header in the format of either "bytes=100-199" or "bytes=100-".
-func DownloadFileStream(cfg *config.Config, fileUUID string, optionalRange ...string) (io.ReadCloser, error) {
+func DownloadFileStream(ctx context.Context, cfg *config.Config, fileUUID string, optionalRange ...string) (io.ReadCloser, error) {
 	rangeValue := ""
 	if len(optionalRange) > 0 {
 		rangeValue = optionalRange[0]
 	}
 
 	// 1) Fetch file info (including shards and index)
-	info, err := GetBucketFileInfo(cfg, cfg.Bucket, fileUUID)
+	info, err := GetBucketFileInfo(ctx, cfg, cfg.Bucket, fileUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +157,7 @@ func DownloadFileStream(cfg *config.Config, fileUUID string, optionalRange ...st
 				adjustedRange = fmt.Sprintf("bytes=%d-%d", alignedStart, endByte)
 			}
 
-			stream, err := DownloadFileStream(cfg, fileUUID, adjustedRange)
+			stream, err := DownloadFileStream(ctx, cfg, fileUUID, adjustedRange)
 			if err != nil {
 				return nil, err
 			}
@@ -173,7 +174,7 @@ func DownloadFileStream(cfg *config.Config, fileUUID string, optionalRange ...st
 	}
 
 	// 4) Download the encrypted shard, include the Range header if any
-	req, err := http.NewRequest("GET", shard.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", shard.URL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

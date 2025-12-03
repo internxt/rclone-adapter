@@ -1,6 +1,7 @@
 package buckets
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,8 +16,8 @@ type TransferResult struct {
 }
 
 // Transfer uploads data to the given URL and returns the ETag
-func Transfer(cfg *config.Config, uploadURL string, r io.Reader, size int64) (*TransferResult, error) {
-	req, err := http.NewRequest("PUT", uploadURL, r)
+func Transfer(ctx context.Context, cfg *config.Config, uploadURL string, r io.Reader, size int64) (*TransferResult, error) {
+	req, err := http.NewRequestWithContext(ctx, "PUT", uploadURL, r)
 	if err != nil {
 		return nil, err
 	}

@@ -2,6 +2,7 @@ package files
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,12 +13,12 @@ import (
 )
 
 // DeleteFile deletes a file by UUID
-func DeleteFile(cfg *config.Config, uuid string) error {
+func DeleteFile(ctx context.Context, cfg *config.Config, uuid string) error {
 	u, err := url.Parse(cfg.Endpoints.Drive().Files().Delete(uuid))
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequest("DELETE", u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, "DELETE", u.String(), nil)
 	if err != nil {
 		return err
 	}
@@ -37,7 +38,7 @@ func DeleteFile(cfg *config.Config, uuid string) error {
 }
 
 // RenameFile renames a file by UUID with the given new name and optional type.
-func RenameFile(cfg *config.Config, fileUUID, newPlainName, newType string) error {
+func RenameFile(ctx context.Context, cfg *config.Config, fileUUID, newPlainName, newType string) error {
 	endpoint := cfg.Endpoints.Drive().Files().Meta(fileUUID)
 
 	payload := map[string]string{
@@ -52,7 +53,7 @@ func RenameFile(cfg *config.Config, fileUUID, newPlainName, newType string) erro
 		return err
 	}
 
-	req, err := http.NewRequest(http.MethodPut, endpoint, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

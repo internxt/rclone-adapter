@@ -1,6 +1,7 @@
 package users
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -14,9 +15,9 @@ type LimitResponse struct {
 }
 
 // GetLimit calls {DRIVE_API_URL}/users/limit and returns the maximum available storage of the account.
-func GetLimit(cfg *config.Config) (*LimitResponse, error) {
+func GetLimit(ctx context.Context, cfg *config.Config) (*LimitResponse, error) {
 	url := cfg.Endpoints.Drive().Users().Limit()
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}

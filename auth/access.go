@@ -55,7 +55,7 @@ type AccessResponse struct {
 }
 
 // AccessLogin calls {DRIVE_API_URL}/auth/login/access based on our previous LoginResponse
-func AccessLogin(cfg *config.Config, lr *LoginResponse) (*AccessResponse, error) {
+func AccessLogin(ctx context.Context, cfg *config.Config, lr *LoginResponse) (*AccessResponse, error) {
 	encPwd, err := deriveEncryptedPassword(cfg.Password, lr.SKey, cfg.AppCryptoSecret)
 	if err != nil {
 		return nil, err
@@ -72,7 +72,7 @@ func AccessLogin(cfg *config.Config, lr *LoginResponse) (*AccessResponse, error)
 
 	b, _ := json.Marshal(req)
 
-	httpReq, err := http.NewRequest(http.MethodPost, cfg.Endpoints.Drive().Auth().LoginAccess(), bytes.NewReader(b))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.Endpoints.Drive().Auth().LoginAccess(), bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}
@@ -109,10 +109,10 @@ func AccessLogin(cfg *config.Config, lr *LoginResponse) (*AccessResponse, error)
 	return &ar, nil
 }
 
-func AreCredentialsCorrect(cfg *config.Config, hashedPassword string) (bool, error) {
+func AreCredentialsCorrect(ctx context.Context, cfg *config.Config, hashedPassword string) (bool, error) {
 	endpoint := cfg.Endpoints.Drive().Auth().CredentialsCorrect(hashedPassword)
 
-	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return false, err
 	}

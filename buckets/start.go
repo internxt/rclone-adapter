@@ -2,6 +2,7 @@ package buckets
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -33,7 +34,7 @@ type StartUploadResp struct {
 }
 
 // StartUpload reserves all parts at once
-func StartUpload(cfg *config.Config, bucketID string, parts []UploadPartSpec) (*StartUploadResp, error) {
+func StartUpload(ctx context.Context, cfg *config.Config, bucketID string, parts []UploadPartSpec) (*StartUploadResp, error) {
 	url := cfg.Endpoints.Network().StartUpload(bucketID)
 	url += fmt.Sprintf("?multiparts=%d", len(parts))
 	reqBody := startUploadReq{Uploads: parts}
@@ -42,7 +43,7 @@ func StartUpload(cfg *config.Config, bucketID string, parts []UploadPartSpec) (*
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewReader(b))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +82,7 @@ func StartUpload(cfg *config.Config, bucketID string, parts []UploadPartSpec) (*
 }
 
 // StartUploadMultipart starts a multipart upload session with explicit part count
-func StartUploadMultipart(cfg *config.Config, bucketID string, parts []UploadPartSpec, numParts int) (*StartUploadResp, error) {
+func StartUploadMultipart(ctx context.Context, cfg *config.Config, bucketID string, parts []UploadPartSpec, numParts int) (*StartUploadResp, error) {
 	url := cfg.Endpoints.Network().StartUpload(bucketID)
 	url += fmt.Sprintf("?multiparts=%d", numParts)
 	reqBody := startUploadReq{Uploads: parts}
@@ -90,7 +91,7 @@ func StartUploadMultipart(cfg *config.Config, bucketID string, parts []UploadPar
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewReader(b))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}

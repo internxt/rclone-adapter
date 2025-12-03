@@ -3,6 +3,7 @@ package auth
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -18,11 +19,11 @@ type LoginResponse struct {
 }
 
 // Login calls the auth login endpoint with {"email":…}
-func Login(cfg *config.Config) (*LoginResponse, error) {
+func Login(ctx context.Context, cfg *config.Config) (*LoginResponse, error) {
 	payload := map[string]string{"email": cfg.Email}
 	b, _ := json.Marshal(payload)
 
-	req, err := http.NewRequest(http.MethodPost, cfg.Endpoints.Drive().Auth().Login(), bytes.NewReader(b))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.Endpoints.Drive().Auth().Login(), bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}
