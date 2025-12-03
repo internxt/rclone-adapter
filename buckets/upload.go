@@ -1,6 +1,7 @@
 package buckets
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -15,7 +16,7 @@ import (
 	"github.com/internxt/rclone-adapter/config"
 )
 
-func UploadFile(cfg *config.Config, filePath, targetFolderUUID string, modTime time.Time) (*CreateMetaResponse, error) {
+func UploadFile(ctx context.Context, cfg *config.Config, filePath, targetFolderUUID string, modTime time.Time) (*CreateMetaResponse, error) {
 	raw, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
@@ -45,7 +46,7 @@ func UploadFile(cfg *config.Config, filePath, targetFolderUUID string, modTime t
 	r := io.TeeReader(encReader, sha256Hasher)
 	r = io.TeeReader(r, sha1Hasher)
 	specs := []UploadPartSpec{{Index: 0, Size: plainSize}}
-	startResp, err := StartUpload(cfg, cfg.Bucket, specs)
+	startResp, err := StartUpload(ctx, cfg, cfg.Bucket, specs)
 	if err != nil {
 		return nil, err
 	}
@@ -54,20 +55,20 @@ func UploadFile(cfg *config.Config, filePath, targetFolderUUID string, modTime t
 	if len(part.URLs) > 0 {
 		uploadURL = part.URLs[0]
 	}
-	if _, err := Transfer(cfg, uploadURL, r, plainSize); err != nil {
+	if _, err := Transfer(ctx, cfg, uploadURL, r, plainSize); err != nil {
 		return nil, err
 	}
 	encIndex := hex.EncodeToString(ph[:])
 	partHash := hex.EncodeToString(sha1Hasher.Sum(nil))
 
-	finishResp, err := FinishUpload(cfg, cfg.Bucket, encIndex, []Shard{{Hash: partHash, UUID: part.UUID}})
+	finishResp, err := FinishUpload(ctx, cfg, cfg.Bucket, encIndex, []Shard{{Hash: partHash, UUID: part.UUID}})
 	if err != nil {
 		return nil, err
 	}
 	base := filepath.Base(filePath)
 	name := strings.TrimSuffix(base, filepath.Ext(base))
 	ext := strings.TrimPrefix(filepath.Ext(base), ".")
-	meta, err := CreateMetaFile(cfg, name, cfg.Bucket, finishResp.ID, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
+	meta, err := CreateMetaFile(ctx, cfg, name, cfg.Bucket, finishResp.ID, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +78,7 @@ func UploadFile(cfg *config.Config, filePath, targetFolderUUID string, modTime t
 // UploadFileStream uploads data from the provided io.Reader into Internxt,
 // encrypting it on the fly and creating the metadata file in the target folder.
 // It returns the CreateMetaResponse of the created file entry.
-func UploadFileStream(cfg *config.Config, targetFolderUUID, fileName string, in io.Reader, plainSize int64, modTime time.Time) (*CreateMetaResponse, error) {
+func UploadFileStream(ctx context.Context, cfg *config.Config, targetFolderUUID, fileName string, in io.Reader, plainSize int64, modTime time.Time) (*CreateMetaResponse, error) {
 	var ph [32]byte
 	if _, err := rand.Read(ph[:]); err != nil {
 		return nil, fmt.Errorf("cannot generate random index: %w", err)
@@ -100,7 +101,7 @@ func UploadFileStream(cfg *config.Config, targetFolderUUID, fileName string, in 
 	r = io.TeeReader(r, sha1Hasher)
 
 	specs := []UploadPartSpec{{Index: 0, Size: plainSize}}
-	startResp, err := StartUpload(cfg, cfg.Bucket, specs)
+	startResp, err := StartUpload(ctx, cfg, cfg.Bucket, specs)
 	if err != nil {
 		return nil, err
 	}
@@ -115,13 +116,13 @@ func UploadFileStream(cfg *config.Config, targetFolderUUID, fileName string, in 
 		uploadURL = part.URLs[0]
 	}
 
-	if _, err := Transfer(cfg, uploadURL, r, plainSize); err != nil {
+	if _, err := Transfer(ctx, cfg, uploadURL, r, plainSize); err != nil {
 		return nil, err
 	}
 
 	encIndex := hex.EncodeToString(ph[:])
 	partHash := hex.EncodeToString(sha1Hasher.Sum(nil))
-	finishResp, err := FinishUpload(cfg, cfg.Bucket, encIndex, []Shard{{Hash: partHash, UUID: part.UUID}})
+	finishResp, err := FinishUpload(ctx, cfg, cfg.Bucket, encIndex, []Shard{{Hash: partHash, UUID: part.UUID}})
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +130,7 @@ func UploadFileStream(cfg *config.Config, targetFolderUUID, fileName string, in 
 	base := filepath.Base(fileName)
 	name := strings.TrimSuffix(base, filepath.Ext(base))
 	ext := strings.TrimPrefix(filepath.Ext(base), ".")
-	meta, err := CreateMetaFile(cfg, name, cfg.Bucket, finishResp.ID, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
+	meta, err := CreateMetaFile(ctx, cfg, name, cfg.Bucket, finishResp.ID, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
 	if err != nil {
 		return nil, err
 	}
@@ -138,18 +139,18 @@ func UploadFileStream(cfg *config.Config, targetFolderUUID, fileName string, in 
 
 // UploadFileStreamMultipart uploads data from an io.Reader using multipart upload.
 // This is intended for large files (>100MB) and splits the file into multiple chunks
-func UploadFileStreamMultipart(cfg *config.Config, targetFolderUUID, fileName string, in io.Reader, plainSize int64, modTime time.Time) (*CreateMetaResponse, error) {
+func UploadFileStreamMultipart(ctx context.Context, cfg *config.Config, targetFolderUUID, fileName string, in io.Reader, plainSize int64, modTime time.Time) (*CreateMetaResponse, error) {
 	state, err := newMultipartUploadState(cfg, plainSize)
 	if err != nil {
 		return nil, err
 	}
 
-	shard, err := state.executeMultipartUpload(in)
+	shard, err := state.executeMultipartUpload(ctx, in)
 	if err != nil {
 		return nil, err
 	}
 
-	finishResp, err := FinishMultipartUpload(cfg, cfg.Bucket, state.encIndex, *shard)
+	finishResp, err := FinishMultipartUpload(ctx, cfg, cfg.Bucket, state.encIndex, *shard)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +158,7 @@ func UploadFileStreamMultipart(cfg *config.Config, targetFolderUUID, fileName st
 	base := filepath.Base(fileName)
 	name := strings.TrimSuffix(base, filepath.Ext(base))
 	ext := strings.TrimPrefix(filepath.Ext(base), ".")
-	meta, err := CreateMetaFile(cfg, name, cfg.Bucket, finishResp.ID, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
+	meta, err := CreateMetaFile(ctx, cfg, name, cfg.Bucket, finishResp.ID, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
 	if err != nil {
 		return nil, err
 	}
@@ -166,9 +167,9 @@ func UploadFileStreamMultipart(cfg *config.Config, targetFolderUUID, fileName st
 }
 
 // UploadFileStreamAuto automatically chooses between single-part and multipart upload
-func UploadFileStreamAuto(cfg *config.Config, targetFolderUUID, fileName string, in io.Reader, plainSize int64, modTime time.Time) (*CreateMetaResponse, error) {
+func UploadFileStreamAuto(ctx context.Context, cfg *config.Config, targetFolderUUID, fileName string, in io.Reader, plainSize int64, modTime time.Time) (*CreateMetaResponse, error) {
 	if plainSize >= config.DefaultMultipartMinSize {
-		return UploadFileStreamMultipart(cfg, targetFolderUUID, fileName, in, plainSize, modTime)
+		return UploadFileStreamMultipart(ctx, cfg, targetFolderUUID, fileName, in, plainSize, modTime)
 	}
-	return UploadFileStream(cfg, targetFolderUUID, fileName, in, plainSize, modTime)
+	return UploadFileStream(ctx, cfg, targetFolderUUID, fileName, in, plainSize, modTime)
 }

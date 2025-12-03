@@ -2,6 +2,7 @@ package buckets
 
 import (
 	"bytes"
+	"context"
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha1"
@@ -82,11 +83,11 @@ func newMultipartUploadState(cfg *config.Config, plainSize int64) (*multipartUpl
 }
 
 // executeMultipartUpload orchestrates the entire multipart upload process
-func (s *multipartUploadState) executeMultipartUpload(reader io.Reader) (*MultipartShard, error) {
+func (s *multipartUploadState) executeMultipartUpload(ctx context.Context, reader io.Reader) (*MultipartShard, error) {
 	specs := []UploadPartSpec{{Index: 0, Size: s.totalSize}}
 
 	var err error
-	s.startResp, err = StartUploadMultipart(s.cfg, s.cfg.Bucket, specs, int(s.numParts))
+	s.startResp, err = StartUploadMultipart(ctx, s.cfg, s.cfg.Bucket, specs, int(s.numParts))
 	if err != nil {
 		return nil, fmt.Errorf("failed to start multipart upload: %w", err)
 	}
@@ -103,7 +104,7 @@ func (s *multipartUploadState) executeMultipartUpload(reader io.Reader) (*Multip
 	s.uploadId = uploadInfo.UploadId
 	s.uuid = uploadInfo.UUID
 
-	completedParts, overallHash, err := s.encryptAndUploadPipelined(reader)
+	completedParts, overallHash, err := s.encryptAndUploadPipelined(ctx, reader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt and upload chunks: %w", err)
 	}
@@ -117,7 +118,7 @@ func (s *multipartUploadState) executeMultipartUpload(reader io.Reader) (*Multip
 }
 
 // encryptAndUploadPipelined encrypts chunks and uploads them concurrently
-func (s *multipartUploadState) encryptAndUploadPipelined(reader io.Reader) ([]CompletedPart, string, error) {
+func (s *multipartUploadState) encryptAndUploadPipelined(ctx context.Context, reader io.Reader) ([]CompletedPart, string, error) {
 	chunkChan := make(chan encryptedChunk, s.maxConcurrency)
 
 	var uploadWg sync.WaitGroup
@@ -135,6 +136,14 @@ func (s *multipartUploadState) encryptAndUploadPipelined(reader io.Reader) ([]Co
 		defer close(chunkChan)
 
 		for i := int64(0); i < s.numParts; i++ {
+			select {
+			case <-ctx.Done():
+				encryptErr = ctx.Err()
+				chunkChan <- encryptedChunk{index: int(i), err: encryptErr}
+				return
+			default:
+			}
+
 			chunkSize := s.chunkSize
 			if i == s.numParts-1 {
 				chunkSize = s.totalSize - (i * s.chunkSize)
@@ -177,7 +186,7 @@ func (s *multipartUploadState) encryptAndUploadPipelined(reader io.Reader) ([]Co
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
-			etag, err := s.uploadChunkWithRetry(ch.index, ch.data)
+			etag, err := s.uploadChunkWithRetry(ctx, ch.index, ch.data)
 
 			results <- uploadResult{
 				index: ch.index,
@@ -221,7 +230,7 @@ func (s *multipartUploadState) encryptAndUploadPipelined(reader io.Reader) ([]Co
 }
 
 // uploadChunkWithRetry uploads a single chunk with exponential backoff retry
-func (s *multipartUploadState) uploadChunkWithRetry(partIndex int, encryptedData []byte) (string, error) {
+func (s *multipartUploadState) uploadChunkWithRetry(ctx context.Context, partIndex int, encryptedData []byte) (string, error) {
 	const maxRetries = 3
 	const baseDelay = 1 * time.Second
 
@@ -229,12 +238,25 @@ func (s *multipartUploadState) uploadChunkWithRetry(partIndex int, encryptedData
 
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		if attempt > 0 {
-			delay := baseDelay * time.Duration(1<<uint(attempt-1))
-			time.Sleep(delay)
+		// Check context cancellation before retry
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		default:
 		}
 
-		result, err := Transfer(s.cfg, uploadURL, bytes.NewReader(encryptedData), int64(len(encryptedData)))
+		if attempt > 0 {
+			delay := baseDelay * time.Duration(1<<uint(attempt-1))
+			timer := time.NewTimer(delay)
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+				timer.Stop()
+				return "", ctx.Err()
+			}
+		}
+
+		result, err := Transfer(ctx, s.cfg, uploadURL, bytes.NewReader(encryptedData), int64(len(encryptedData)))
 		if err == nil {
 			return result.ETag, nil
 		}

@@ -2,6 +2,7 @@ package buckets
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -38,7 +39,7 @@ type CreateMetaResponse struct {
 	Created        string      `json:"created"`
 }
 
-func CreateMetaFile(cfg *config.Config, name, bucketID, fileID, encryptVersion, folderUuid, plainName, fileType string, size int64, modTime time.Time) (*CreateMetaResponse, error) {
+func CreateMetaFile(ctx context.Context, cfg *config.Config, name, bucketID, fileID, encryptVersion, folderUuid, plainName, fileType string, size int64, modTime time.Time) (*CreateMetaResponse, error) {
 	url := cfg.Endpoints.Drive().Files().Create()
 	reqBody := CreateMetaRequest{
 		Name:             name,
@@ -57,7 +58,7 @@ func CreateMetaFile(cfg *config.Config, name, bucketID, fileID, encryptVersion, 
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest("POST", url, bytes.NewReader(b))
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}

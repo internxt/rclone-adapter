@@ -2,6 +2,7 @@ package folders
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,7 +16,7 @@ import (
 
 // CreateFolder calls the folder creation endpoint with authorization.
 // It auto‑fills CreationTime/ModificationTime if empty, checks status, and returns the newly created Folder.
-func CreateFolder(cfg *config.Config, reqBody CreateFolderRequest) (*Folder, error) {
+func CreateFolder(ctx context.Context, cfg *config.Config, reqBody CreateFolderRequest) (*Folder, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if reqBody.CreationTime == "" {
 		reqBody.CreationTime = now
@@ -30,7 +31,7 @@ func CreateFolder(cfg *config.Config, reqBody CreateFolderRequest) (*Folder, err
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", endpoint, bytes.NewReader(b))
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}
@@ -57,12 +58,12 @@ func CreateFolder(cfg *config.Config, reqBody CreateFolderRequest) (*Folder, err
 }
 
 // DeleteFolders deletes a folder by UUID
-func DeleteFolder(cfg *config.Config, uuid string) error {
+func DeleteFolder(ctx context.Context, cfg *config.Config, uuid string) error {
 	u, err := url.Parse(cfg.Endpoints.Drive().Folders().Delete(uuid))
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequest("DELETE", u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, "DELETE", u.String(), nil)
 	if err != nil {
 		return err
 	}
@@ -84,7 +85,7 @@ func DeleteFolder(cfg *config.Config, uuid string) error {
 
 // ListFolders lists child folders under the given parent UUID.
 // Returns a slice of folders or error otherwise
-func ListFolders(cfg *config.Config, parentUUID string, opts ListOptions) ([]Folder, error) {
+func ListFolders(ctx context.Context, cfg *config.Config, parentUUID string, opts ListOptions) ([]Folder, error) {
 	base := cfg.Endpoints.Drive().Folders().ContentFolders(parentUUID)
 	u, err := url.Parse(base)
 	if err != nil {
@@ -115,7 +116,7 @@ func ListFolders(cfg *config.Config, parentUUID string, opts ListOptions) ([]Fol
 
 	u.RawQuery = q.Encode()
 
-	req, err := http.NewRequest("GET", u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +143,7 @@ func ListFolders(cfg *config.Config, parentUUID string, opts ListOptions) ([]Fol
 
 // ListFiles lists files under the given parent folder UUID.
 // Returns a slice of files or error otherwise
-func ListFiles(cfg *config.Config, parentUUID string, opts ListOptions) ([]File, error) {
+func ListFiles(ctx context.Context, cfg *config.Config, parentUUID string, opts ListOptions) ([]File, error) {
 	base := cfg.Endpoints.Drive().Folders().ContentFiles(parentUUID)
 	u, err := url.Parse(base)
 	if err != nil {
@@ -173,7 +174,7 @@ func ListFiles(cfg *config.Config, parentUUID string, opts ListOptions) ([]File,
 
 	u.RawQuery = q.Encode()
 
-	req, err := http.NewRequest("GET", u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -201,13 +202,13 @@ func ListFiles(cfg *config.Config, parentUUID string, opts ListOptions) ([]File,
 }
 
 // This function will get all of the files in a folder, getting 50 at a time until completed
-func ListAllFiles(cfg *config.Config, parentUUID string) ([]File, error) {
+func ListAllFiles(ctx context.Context, cfg *config.Config, parentUUID string) ([]File, error) {
 	var outFiles []File
 	offset := 0
 	loops := 0
 	maxLoops := 10000 //Find sane number...
 	for {
-		files, err := ListFiles(cfg, parentUUID, ListOptions{Offset: offset})
+		files, err := ListFiles(ctx, cfg, parentUUID, ListOptions{Offset: offset})
 		if err != nil {
 			return nil, err
 		}
@@ -222,13 +223,13 @@ func ListAllFiles(cfg *config.Config, parentUUID string) ([]File, error) {
 }
 
 // This function will get all of the folders in a folder, getting 50 at a time until completed
-func ListAllFolders(cfg *config.Config, parentUUID string) ([]Folder, error) {
+func ListAllFolders(ctx context.Context, cfg *config.Config, parentUUID string) ([]Folder, error) {
 	var outFolders []Folder
 	offset := 0
 	loops := 0
 	maxLoops := 10000 //Find sane number...
 	for {
-		files, err := ListFolders(cfg, parentUUID, ListOptions{Offset: offset})
+		files, err := ListFolders(ctx, cfg, parentUUID, ListOptions{Offset: offset})
 		if err != nil {
 			return nil, err
 		}
