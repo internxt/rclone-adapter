@@ -148,12 +148,19 @@ func deriveEncryptedPassword(password, hexSalt, secret string) (string, error) {
 func decryptTextWithKey(hexCipher, secret string) (string, error) {
 	data, err := hex.DecodeString(hexCipher)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("invalid hex encoding: %w", err)
 	}
-	if len(data) < 16 {
-		return "", errors.New("failed to login")
+
+	if len(data) < 32 {
+		return "", errors.New("ciphertext too short")
 	}
+
+	if string(data[:8]) != "Salted__" {
+		return "", errors.New("invalid ciphertext format: missing Salted__ header")
+	}
+
 	salt := data[8:16]
+
 	// EVP_BytesToKey with MD5 ×3
 	d := append([]byte(secret), salt...)
 	var prev = d
@@ -168,21 +175,55 @@ func decryptTextWithKey(hexCipher, secret string) (string, error) {
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to create cipher: %w", err)
 	}
-	mode := cipher.NewCBCDecrypter(block, iv)
+
 	ct := data[16:]
+	if len(ct)%aes.BlockSize != 0 {
+		return "", errors.New("ciphertext is not a multiple of block size")
+	}
+
+	// Decrypt
 	pt := make([]byte, len(ct))
+	mode := cipher.NewCBCDecrypter(block, iv)
 	mode.CryptBlocks(pt, ct)
-	// strip PKCS#7
-	pad := int(pt[len(pt)-1])
-	pt = pt[:len(pt)-pad]
-	return string(pt), nil
+
+	// Validate and remove PKCS#7 padding
+	if len(pt) == 0 {
+		return "", errors.New("plaintext is empty")
+	}
+
+	padLen := int(pt[len(pt)-1])
+	if padLen == 0 || padLen > aes.BlockSize {
+		return "", errors.New("invalid PKCS#7 padding")
+	}
+	if padLen > len(pt) {
+		return "", errors.New("invalid PKCS#7 padding length")
+	}
+
+	paddingStart := len(pt) - padLen
+	validPadding := byte(1)
+	for i := paddingStart; i < len(pt); i++ {
+		validPadding &= byte(1) ^ ((pt[i] ^ byte(padLen)) >> 7)
+		validPadding &= byte(1) ^ (((pt[i] ^ byte(padLen)) << 7) >> 7)
+		if pt[i] != byte(padLen) {
+			validPadding = 0
+		}
+	}
+
+	if validPadding == 0 {
+		return "", errors.New("invalid PKCS#7 padding bytes")
+	}
+
+	return string(pt[:paddingStart]), nil
 }
 
 func encryptTextWithKey(plaintext, secret string) (string, error) {
 	salt := make([]byte, 8)
-	_, _ = rand.Read(salt)
+	if _, err := rand.Read(salt); err != nil {
+		return "", fmt.Errorf("failed to generate random salt: %w", err)
+	}
+
 	d := append([]byte(secret), salt...)
 	var prev = d
 	hashes := make([][]byte, 3)
@@ -196,16 +237,21 @@ func encryptTextWithKey(plaintext, secret string) (string, error) {
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to create cipher: %w", err)
 	}
-	// PKCS#7 pad
-	padLen := aes.BlockSize - len(plaintext)%aes.BlockSize
-	for i := 0; i < padLen; i++ {
-		plaintext += string(byte(padLen))
+
+	// PKCS#7 padding
+	plaintextBytes := []byte(plaintext)
+	padLen := aes.BlockSize - len(plaintextBytes)%aes.BlockSize
+	padding := make([]byte, padLen)
+	for i := range padding {
+		padding[i] = byte(padLen)
 	}
-	ct := make([]byte, len(plaintext))
+	paddedPlaintext := append(plaintextBytes, padding...)
+
+	ct := make([]byte, len(paddedPlaintext))
 	mode := cipher.NewCBCEncrypter(block, iv)
-	mode.CryptBlocks(ct, []byte(plaintext))
+	mode.CryptBlocks(ct, paddedPlaintext)
 
 	out := append([]byte("Salted__"), salt...)
 	out = append(out, ct...)
