@@ -50,11 +50,11 @@ func FinishUpload(ctx context.Context, cfg *config.Config, bucketID, index strin
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal finish upload request: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(b))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create finish upload request: %w", err)
 	}
 	req.Header.Set("Authorization", cfg.BasicAuthHeader)
 	req.Header.Set("internxt-version", "1.0")
@@ -63,7 +63,7 @@ func FinishUpload(ctx context.Context, cfg *config.Config, bucketID, index strin
 
 	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to execute finish upload request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -79,7 +79,7 @@ func FinishUpload(ctx context.Context, cfg *config.Config, bucketID, index strin
 
 	var result FinishUploadResp
 	if err := json.Unmarshal(bodyBytes, &result); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal finish upload response: %w", err)
 	}
 	return &result, nil
 }
@@ -93,12 +93,12 @@ func FinishMultipartUpload(ctx context.Context, cfg *config.Config, bucketID, in
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal finish multipart upload request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(b))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create finish multipart upload request: %w", err)
 	}
 	req.Header.Set("Authorization", cfg.BasicAuthHeader)
 	req.Header.Set("internxt-version", "1.0")
@@ -107,7 +107,7 @@ func FinishMultipartUpload(ctx context.Context, cfg *config.Config, bucketID, in
 
 	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to execute finish multipart upload request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -123,7 +123,7 @@ func FinishMultipartUpload(ctx context.Context, cfg *config.Config, bucketID, in
 
 	var result FinishUploadResp
 	if err := json.Unmarshal(bodyBytes, &result); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal finish multipart upload response: %w", err)
 	}
 	return &result, nil
 }

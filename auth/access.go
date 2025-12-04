@@ -46,13 +46,13 @@ func RefreshToken(ctx context.Context, cfg *config.Config) (*AccessResponse, err
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create refresh token request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+cfg.Token)
 
 	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to execute refresh token request: %w", err)
 	}
 	defer resp.Body.Close()
 

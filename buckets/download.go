@@ -39,7 +39,7 @@ func GetBucketFileInfo(ctx context.Context, cfg *config.Config, bucketID, fileID
 	url := cfg.Endpoints.Network().FileInfo(bucketID, fileID)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create get bucket file info request: %w", err)
 	}
 	req.Header.Set("Authorization", cfg.BasicAuthHeader)
 	req.Header.Set("internxt-version", "1.0")
@@ -47,7 +47,7 @@ func GetBucketFileInfo(ctx context.Context, cfg *config.Config, bucketID, fileID
 
 	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to execute get bucket file info request: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -57,7 +57,7 @@ func GetBucketFileInfo(ctx context.Context, cfg *config.Config, bucketID, fileID
 
 	var info BucketFileInfo
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode bucket file info response: %w", err)
 	}
 	return &info, nil
 }
@@ -67,7 +67,7 @@ func DownloadFile(ctx context.Context, cfg *config.Config, fileID, destPath stri
 	// 1) fetch file info from the bucket API
 	info, err := GetBucketFileInfo(ctx, cfg, cfg.Bucket, fileID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get bucket file info: %w", err)
 	}
 	if len(info.Shards) == 0 {
 		return fmt.Errorf("no shards found for file %s", fileID)
@@ -77,17 +77,17 @@ func DownloadFile(ctx context.Context, cfg *config.Config, fileID, destPath stri
 	// 2) derive fileKey+iv using the stored index (hex of random index)
 	key, iv, err := GenerateFileKey(cfg.Mnemonic, cfg.Bucket, info.Index)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to generate file key: %w", err)
 	}
 
 	// 3) GET the encrypted shard directly from its presigned URL
 	req, err := http.NewRequestWithContext(ctx, "GET", shard.URL, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create download request: %w", err)
 	}
 	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to execute download request: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -98,18 +98,18 @@ func DownloadFile(ctx context.Context, cfg *config.Config, fileID, destPath stri
 	// 4) wrap in AES‑CTR decryptor
 	decReader, err := DecryptReader(resp.Body, key, iv)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create decrypt reader: %w", err)
 	}
 
 	// 5) write plaintext to file
 	out, err := os.Create(destPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create destination file %s: %w", destPath, err)
 	}
 	defer out.Close()
 
 	if _, err := io.Copy(out, decReader); err != nil {
-		return err
+		return fmt.Errorf("failed to write decrypted data to file: %w", err)
 	}
 	return nil
 }
@@ -126,7 +126,7 @@ func DownloadFileStream(ctx context.Context, cfg *config.Config, fileUUID string
 	// 1) Fetch file info (including shards and index)
 	info, err := GetBucketFileInfo(ctx, cfg, cfg.Bucket, fileUUID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get bucket file info: %w", err)
 	}
 	if len(info.Shards) == 0 {
 		return nil, fmt.Errorf("no shards found for file %s", fileUUID)
@@ -159,7 +159,7 @@ func DownloadFileStream(ctx context.Context, cfg *config.Config, fileUUID string
 
 			stream, err := DownloadFileStream(ctx, cfg, fileUUID, adjustedRange)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to download aligned stream: %w", err)
 			}
 
 			// Discard unwanted bytes and return the requested range exactly
@@ -184,7 +184,7 @@ func DownloadFileStream(ctx context.Context, cfg *config.Config, fileUUID string
 
 	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to execute download stream request: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
@@ -196,7 +196,7 @@ func DownloadFileStream(ctx context.Context, cfg *config.Config, fileUUID string
 	decReader, err := DecryptReader(resp.Body, key, iv)
 	if err != nil {
 		resp.Body.Close()
-		return nil, err
+		return nil, fmt.Errorf("failed to create decrypt reader: %w", err)
 	}
 
 	// 6) Return a ReadCloser that closes the HTTP body when closed

@@ -16,16 +16,16 @@ import (
 func DeleteFile(ctx context.Context, cfg *config.Config, uuid string) error {
 	u, err := url.Parse(cfg.Endpoints.Drive().Files().Delete(uuid))
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to parse delete file URL: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, "DELETE", u.String(), nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create delete file request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+cfg.Token)
 	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to execute delete file request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -50,19 +50,19 @@ func RenameFile(ctx context.Context, cfg *config.Config, fileUUID, newPlainName,
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal rename file request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create rename file request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+cfg.Token)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to execute rename file request: %w", err)
 	}
 	defer resp.Body.Close()
 
