@@ -2,6 +2,7 @@ package buckets
 
 import (
 	"encoding/json"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -132,7 +133,7 @@ func TestStartUploadMultipart(t *testing.T) {
 				{Index: 0, Size: tc.fileSize},
 			}
 
-			result, err := StartUploadMultipart(cfg, "test-bucket", specs, tc.numParts)
+			result, err := StartUploadMultipart(context.Background(), cfg, "test-bucket", specs, tc.numParts)
 
 			if tc.expectError {
 				if err == nil {
@@ -201,7 +202,7 @@ func TestStartUploadMultipartRequestFormat(t *testing.T) {
 		{Index: 0, Size: 100 * 1024 * 1024},
 	}
 
-	_, err := StartUploadMultipart(cfg, "bucket-123", specs, 2)
+	_, err := StartUploadMultipart(context.Background(), cfg, "bucket-123", specs, 2)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

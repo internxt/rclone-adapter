@@ -2,6 +2,7 @@ package buckets
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
@@ -169,7 +170,7 @@ func TestEncryptedChunkPipeline(t *testing.T) {
 	state.uploadId = "test-upload-id"
 
 	reader := bytes.NewReader(testData)
-	parts, overallHash, err := state.encryptAndUploadPipelined(reader)
+	parts, overallHash, err := state.encryptAndUploadPipelined(context.Background(), reader)
 	if err != nil {
 		t.Fatalf("encryptAndUploadPipelined failed: %v", err)
 	}
@@ -311,7 +312,7 @@ func TestChunkRetryLogic(t *testing.T) {
 	}
 
 	testData := []byte("test data")
-	etag, err := state.uploadChunkWithRetry(0, testData)
+	etag, err := state.uploadChunkWithRetry(context.Background(), 0, testData)
 
 	if err != nil {
 		t.Fatalf("expected success after retries, got error: %v", err)
@@ -355,7 +356,7 @@ func TestChunkRetryExhaustion(t *testing.T) {
 	}
 
 	testData := []byte("test data")
-	_, err = state.uploadChunkWithRetry(0, testData)
+	_, err = state.uploadChunkWithRetry(context.Background(), 0, testData)
 
 	if err == nil {
 		t.Fatal("expected error for 404, got nil")
