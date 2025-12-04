@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"github.com/internxt/rclone-adapter/config"
@@ -30,7 +30,7 @@ func GetUsage(ctx context.Context, cfg *config.Config) (*UsageResponse, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("GET %s returned %d: %s", url, resp.StatusCode, string(body))
 	}
 
