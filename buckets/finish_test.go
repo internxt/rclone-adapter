@@ -2,6 +2,7 @@ package buckets
 
 import (
 	"encoding/json"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -206,7 +207,10 @@ func TestFinishMultipartUpload(t *testing.T) {
 			}
 
 			// Call FinishMultipartUpload
-			result, err := FinishMultipartUpload(cfg, "test-bucket", "test-index", tc.shard)
+			result, err := FinishMultipartUpload(context.Background(), cfg, "test-bucket", "test-index", tc.shard)
+			if err != nil {
+				t.Fatalf("FinishMultipartUpload failed: %v", err)
+			}
 
 			// Verify results
 			if tc.expectError {
@@ -263,7 +267,7 @@ func TestFinishMultipartUploadPayloadStructure(t *testing.T) {
 		},
 	}
 
-	_, err := FinishMultipartUpload(cfg, "bucket-123", "index-456", shard)
+	_, err := FinishMultipartUpload(context.Background(), cfg, "bucket-123", "index-456", shard)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -329,7 +333,7 @@ func TestFinishMultipartUploadEmptyParts(t *testing.T) {
 		Parts:    []CompletedPart{}, // Empty parts
 	}
 
-	_, err := FinishMultipartUpload(cfg, "bucket", "index", shard)
+	_, err := FinishMultipartUpload(context.Background(), cfg, "bucket", "index", shard)
 
 	if err == nil {
 		t.Error("expected error for empty parts, got nil")
