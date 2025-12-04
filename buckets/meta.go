@@ -56,11 +56,11 @@ func CreateMetaFile(ctx context.Context, cfg *config.Config, name, bucketID, fil
 	}
 	b, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal create meta request: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(b))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create meta request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+cfg.Token)
 	req.Header.Set("internxt-version", "v1.0.436")
@@ -68,7 +68,7 @@ func CreateMetaFile(ctx context.Context, cfg *config.Config, name, bucketID, fil
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to execute create meta request: %w", err)
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
@@ -77,7 +77,7 @@ func CreateMetaFile(ctx context.Context, cfg *config.Config, name, bucketID, fil
 	}
 	var result CreateMetaResponse
 	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to unmarshal create meta response: %w", err)
 	}
 	return &result, nil
 }

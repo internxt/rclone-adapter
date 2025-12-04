@@ -23,7 +23,7 @@ func TestGenerateBucketKey(t *testing.T) {
 	want := "726a02ad035960f8b6563497557bb8efe15cdb160ffb40541102c92c89262a00"
 	got, _ := GenerateBucketKey(TEST_MNEMONIC, TEST_BUCKET_ID)
 	if want != got {
-		t.Fatalf("Wanted " + want + ", but got " + got)
+		t.Fatalf("Wanted %s, but got %s", want, got)
 	}
 }
 
@@ -31,7 +31,7 @@ func TestGetFileDeterministicKey(t *testing.T) {
 	want := "a4321694c796a075a91818192f0fe66ccc0ad8a9b75251e8034b6661a7ea97e5e347e5ce0be65a23a8e6eefa205e2d27651de21013589dfb7fde458588f84314"
 	got := hex.EncodeToString(GetFileDeterministicKey([]byte(TEST_MNEMONIC), []byte(TEST_MNEMONIC)))
 	if want != got {
-		t.Fatalf("Wanted " + want + ", but got " + got)
+		t.Fatalf("Wanted %s, but got %s", want, got)
 	}
 }
 
@@ -40,7 +40,7 @@ func TestGetDeterministicKey(t *testing.T) {
 	got, _ := GetDeterministicKey(TEST_BUCKET_ID, TEST_BUCKET_ID)
 	gotString := hex.EncodeToString(got)
 	if want != gotString {
-		t.Fatalf("Wanted " + want + ", but got " + gotString)
+		t.Fatalf("Wanted %s, but got %s", want, gotString)
 	}
 }
 
@@ -49,7 +49,7 @@ func TestCalculateFileHash(t *testing.T) {
 	test := bytes.NewReader(TEST_BUCKET_ID)
 	got, _ := CalculateFileHash(test)
 	if want != got {
-		t.Fatalf("Wanted " + want + ", but got " + got)
+		t.Fatalf("Wanted %s, but got %s", want, got)
 	}
 }
 
@@ -62,6 +62,6 @@ func TestGenerateFileKey(t *testing.T) {
 	gotIVString := hex.EncodeToString(gotIV)
 
 	if wantKey != gotKeyString || wantIV != gotIVString {
-		t.Fatalf("\nWanted " + wantKey + " and " + wantIV + "\ngot " + gotKeyString + " and " + gotIVString)
+		t.Fatalf("\nWanted %s and %s\ngot %s and %s", wantKey, wantIV, gotKeyString, gotIVString)
 	}
 }

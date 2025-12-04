@@ -19,7 +19,7 @@ import (
 func UploadFile(ctx context.Context, cfg *config.Config, filePath, targetFolderUUID string, modTime time.Time) (*CreateMetaResponse, error) {
 	raw, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read file %s: %w", filePath, err)
 	}
 	plainSize := int64(len(raw))
 	var ph [32]byte
@@ -30,16 +30,16 @@ func UploadFile(ctx context.Context, cfg *config.Config, filePath, targetFolderU
 	plainIndex := hex.EncodeToString(ph[:])
 	fileKey, iv, err := GenerateFileKey(cfg.Mnemonic, cfg.Bucket, plainIndex)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to generate file key: %w", err)
 	}
 	f, err := os.Open(filePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open file %s: %w", filePath, err)
 	}
 	defer f.Close()
 	encReader, err := EncryptReader(f, fileKey, iv)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create encrypt reader: %w", err)
 	}
 	sha256Hasher := sha256.New()
 	sha1Hasher := sha1.New()
@@ -48,7 +48,7 @@ func UploadFile(ctx context.Context, cfg *config.Config, filePath, targetFolderU
 	specs := []UploadPartSpec{{Index: 0, Size: plainSize}}
 	startResp, err := StartUpload(ctx, cfg, cfg.Bucket, specs)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to start upload: %w", err)
 	}
 	part := startResp.Uploads[0]
 	uploadURL := part.URL
@@ -56,21 +56,21 @@ func UploadFile(ctx context.Context, cfg *config.Config, filePath, targetFolderU
 		uploadURL = part.URLs[0]
 	}
 	if _, err := Transfer(ctx, cfg, uploadURL, r, plainSize); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to transfer file data: %w", err)
 	}
 	encIndex := hex.EncodeToString(ph[:])
 	partHash := hex.EncodeToString(sha1Hasher.Sum(nil))
 
 	finishResp, err := FinishUpload(ctx, cfg, cfg.Bucket, encIndex, []Shard{{Hash: partHash, UUID: part.UUID}})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to finish upload: %w", err)
 	}
 	base := filepath.Base(filePath)
 	name := strings.TrimSuffix(base, filepath.Ext(base))
 	ext := strings.TrimPrefix(filepath.Ext(base), ".")
 	meta, err := CreateMetaFile(ctx, cfg, name, cfg.Bucket, finishResp.ID, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create file metadata: %w", err)
 	}
 	return meta, nil
 }
@@ -87,12 +87,12 @@ func UploadFileStream(ctx context.Context, cfg *config.Config, targetFolderUUID,
 
 	fileKey, iv, err := GenerateFileKey(cfg.Mnemonic, cfg.Bucket, plainIndex)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to generate file key: %w", err)
 	}
 
 	encReader, err := EncryptReader(in, fileKey, iv)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create encrypt reader: %w", err)
 	}
 
 	sha256Hasher := sha256.New()
@@ -103,7 +103,7 @@ func UploadFileStream(ctx context.Context, cfg *config.Config, targetFolderUUID,
 	specs := []UploadPartSpec{{Index: 0, Size: plainSize}}
 	startResp, err := StartUpload(ctx, cfg, cfg.Bucket, specs)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to start upload: %w", err)
 	}
 
 	if len(startResp.Uploads) == 0 {
@@ -117,14 +117,14 @@ func UploadFileStream(ctx context.Context, cfg *config.Config, targetFolderUUID,
 	}
 
 	if _, err := Transfer(ctx, cfg, uploadURL, r, plainSize); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to transfer file data: %w", err)
 	}
 
 	encIndex := hex.EncodeToString(ph[:])
 	partHash := hex.EncodeToString(sha1Hasher.Sum(nil))
 	finishResp, err := FinishUpload(ctx, cfg, cfg.Bucket, encIndex, []Shard{{Hash: partHash, UUID: part.UUID}})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to finish upload: %w", err)
 	}
 
 	base := filepath.Base(fileName)
@@ -132,7 +132,7 @@ func UploadFileStream(ctx context.Context, cfg *config.Config, targetFolderUUID,
 	ext := strings.TrimPrefix(filepath.Ext(base), ".")
 	meta, err := CreateMetaFile(ctx, cfg, name, cfg.Bucket, finishResp.ID, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create file metadata: %w", err)
 	}
 	return meta, nil
 }
@@ -142,17 +142,17 @@ func UploadFileStream(ctx context.Context, cfg *config.Config, targetFolderUUID,
 func UploadFileStreamMultipart(ctx context.Context, cfg *config.Config, targetFolderUUID, fileName string, in io.Reader, plainSize int64, modTime time.Time) (*CreateMetaResponse, error) {
 	state, err := newMultipartUploadState(cfg, plainSize)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to initialize multipart upload state: %w", err)
 	}
 
 	shard, err := state.executeMultipartUpload(ctx, in)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to execute multipart upload: %w", err)
 	}
 
 	finishResp, err := FinishMultipartUpload(ctx, cfg, cfg.Bucket, state.encIndex, *shard)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to finish multipart upload: %w", err)
 	}
 
 	base := filepath.Base(fileName)
@@ -160,7 +160,7 @@ func UploadFileStreamMultipart(ctx context.Context, cfg *config.Config, targetFo
 	ext := strings.TrimPrefix(filepath.Ext(base), ".")
 	meta, err := CreateMetaFile(ctx, cfg, name, cfg.Bucket, finishResp.ID, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create file metadata: %w", err)
 	}
 
 	return meta, nil

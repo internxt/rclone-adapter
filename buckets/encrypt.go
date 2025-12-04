@@ -19,7 +19,7 @@ import (
 func NewAES256CTRCipher(key, iv []byte) (cipher.Stream, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create AES cipher: %w", err)
 	}
 	return cipher.NewCTR(block, iv), nil
 }
@@ -31,7 +31,7 @@ func NewAES256CTRCipher(key, iv []byte) (cipher.Stream, error) {
 func EncryptReader(src io.Reader, key, iv []byte) (io.Reader, error) {
 	stream, err := NewAES256CTRCipher(key, iv)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create encryption stream: %w", err)
 	}
 	return cipher.StreamReader{S: stream, R: src}, nil
 }
@@ -43,7 +43,7 @@ func EncryptReader(src io.Reader, key, iv []byte) (io.Reader, error) {
 func DecryptReader(src io.Reader, key, iv []byte) (io.Reader, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create AES cipher for decryption: %w", err)
 	}
 	stream := cipher.NewCTR(block, iv)
 	return cipher.StreamReader{S: stream, R: src}, nil
@@ -62,7 +62,7 @@ func GenerateFileBucketKey(mnemonic, bucketID string) ([]byte, error) {
 	seed := bip39.NewSeed(mnemonic, "")
 	bucketBytes, err := hex.DecodeString(bucketID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode bucket ID: %w", err)
 	}
 	return GetFileDeterministicKey(seed, bucketBytes), nil
 }
@@ -72,7 +72,7 @@ func GenerateBucketKey(mnem string, bucketID []byte) (string, error) {
 	seed := bip39.NewSeed(mnem, "")
 	deterministicKey, err := GetDeterministicKey(seed, bucketID)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to get deterministic key: %w", err)
 	}
 	return hex.EncodeToString(deterministicKey)[:64], nil
 }
@@ -81,7 +81,7 @@ func GetDeterministicKey(key []byte, data []byte) ([]byte, error) {
 	hasher := sha512.New()
 	data_bytes, err := hex.DecodeString(hex.EncodeToString(key) + hex.EncodeToString(data))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode deterministic key data: %w", err)
 	}
 	hasher.Write(data_bytes)
 	return hasher.Sum(nil), nil
@@ -91,11 +91,11 @@ func GetDeterministicKey(key []byte, data []byte) ([]byte, error) {
 func GenerateFileKey(mnemonic, bucketID, indexHex string) (key, iv []byte, err error) {
 	bucketKey, err := GenerateFileBucketKey(mnemonic, bucketID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to generate bucket key: %w", err)
 	}
 	indexBytes, err := hex.DecodeString(indexHex)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to decode index: %w", err)
 	}
 	detKey := GetFileDeterministicKey(bucketKey[:32], indexBytes)
 	key = detKey[:32]

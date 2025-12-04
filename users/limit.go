@@ -19,13 +19,13 @@ func GetLimit(ctx context.Context, cfg *config.Config) (*LimitResponse, error) {
 	url := cfg.Endpoints.Drive().Users().Limit()
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create get limit request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+cfg.Token)
 	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to execute get limit request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -36,7 +36,7 @@ func GetLimit(ctx context.Context, cfg *config.Config) (*LimitResponse, error) {
 
 	var limit LimitResponse
 	if err := json.NewDecoder(resp.Body).Decode(&limit); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode get limit response: %w", err)
 	}
 
 	return &limit, nil

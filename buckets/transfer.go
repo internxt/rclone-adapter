@@ -19,14 +19,14 @@ type TransferResult struct {
 func Transfer(ctx context.Context, cfg *config.Config, uploadURL string, r io.Reader, size int64) (*TransferResult, error) {
 	req, err := http.NewRequestWithContext(ctx, "PUT", uploadURL, r)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create transfer request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.ContentLength = size
 
 	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to execute transfer request: %w", err)
 	}
 	defer resp.Body.Close()
 

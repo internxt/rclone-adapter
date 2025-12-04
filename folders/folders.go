@@ -28,19 +28,19 @@ func CreateFolder(ctx context.Context, cfg *config.Config, reqBody CreateFolderR
 	endpoint := cfg.Endpoints.Drive().Folders().Create()
 	b, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal create folder request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(b))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create folder request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.Token)
 
 	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to execute create folder request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -51,7 +51,7 @@ func CreateFolder(ctx context.Context, cfg *config.Config, reqBody CreateFolderR
 
 	var folder Folder
 	if err := json.NewDecoder(resp.Body).Decode(&folder); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode create folder response: %w", err)
 	}
 
 	return &folder, nil
@@ -61,16 +61,16 @@ func CreateFolder(ctx context.Context, cfg *config.Config, reqBody CreateFolderR
 func DeleteFolder(ctx context.Context, cfg *config.Config, uuid string) error {
 	u, err := url.Parse(cfg.Endpoints.Drive().Folders().Delete(uuid))
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to parse delete folder URL: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, "DELETE", u.String(), nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create delete folder request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+cfg.Token)
 	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to execute delete folder request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -89,7 +89,7 @@ func ListFolders(ctx context.Context, cfg *config.Config, parentUUID string, opt
 	base := cfg.Endpoints.Drive().Folders().ContentFolders(parentUUID)
 	u, err := url.Parse(base)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse list folders URL: %w", err)
 	}
 	q := u.Query()
 
@@ -118,12 +118,12 @@ func ListFolders(ctx context.Context, cfg *config.Config, parentUUID string, opt
 
 	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create list folders request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+cfg.Token)
 	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to execute list folders request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -136,7 +136,7 @@ func ListFolders(ctx context.Context, cfg *config.Config, parentUUID string, opt
 		Folders []Folder `json:"folders"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&wrapper); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode list folders response: %w", err)
 	}
 	return wrapper.Folders, nil
 }
@@ -147,7 +147,7 @@ func ListFiles(ctx context.Context, cfg *config.Config, parentUUID string, opts 
 	base := cfg.Endpoints.Drive().Folders().ContentFiles(parentUUID)
 	u, err := url.Parse(base)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse list files URL: %w", err)
 	}
 	q := u.Query()
 
@@ -176,12 +176,12 @@ func ListFiles(ctx context.Context, cfg *config.Config, parentUUID string, opts 
 
 	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create list files request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+cfg.Token)
 	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to execute list files request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -196,7 +196,7 @@ func ListFiles(ctx context.Context, cfg *config.Config, parentUUID string, opts 
 	dec := json.NewDecoder(resp.Body)
 	dec.UseNumber()
 	if err := dec.Decode(&wrapper); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode list files response: %w", err)
 	}
 	return wrapper.Files, nil
 }
@@ -210,7 +210,7 @@ func ListAllFiles(ctx context.Context, cfg *config.Config, parentUUID string) ([
 	for {
 		files, err := ListFiles(ctx, cfg, parentUUID, ListOptions{Offset: offset})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to list all files at offset %d: %w", offset, err)
 		}
 		outFiles = append(outFiles, files...)
 		offset += 50
@@ -231,7 +231,7 @@ func ListAllFolders(ctx context.Context, cfg *config.Config, parentUUID string) 
 	for {
 		files, err := ListFolders(ctx, cfg, parentUUID, ListOptions{Offset: offset})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to list all folders at offset %d: %w", offset, err)
 		}
 		outFolders = append(outFolders, files...)
 		offset += 50
