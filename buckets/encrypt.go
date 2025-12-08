@@ -132,3 +132,12 @@ func CalculateFileHash(reader io.Reader) (string, error) {
 
 	return hex.EncodeToString(ripemd160Result), nil
 }
+
+// ComputeFileHash computes RIPEMD-160(SHA-256(data)) from a SHA-256 hash result.
+// This is the standard hash algorithm used by all Internxt clients for file integrity.
+// Takes the raw SHA-256 hash bytes and returns the hex-encoded RIPEMD-160 hash.
+func ComputeFileHash(sha256Sum []byte) string {
+	ripemd160Hasher := ripemd160.New()
+	ripemd160Hasher.Write(sha256Sum)
+	return hex.EncodeToString(ripemd160Hasher.Sum(nil))
+}

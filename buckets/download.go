@@ -3,7 +3,6 @@ package buckets
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/internxt/rclone-adapter/config"
-	"golang.org/x/crypto/ripemd160"
 )
 
 // ShardInfo mirrors the per‑shard info returned by /files/{fileID}/info
@@ -128,9 +126,7 @@ func DownloadFile(ctx context.Context, cfg *config.Config, fileID, destPath stri
 	if !cfg.SkipHashValidation {
 		// Compute RIPEMD-160(SHA-256(encrypted_data)) to match web client
 		sha256Result := sha256Hasher.(interface{ Sum([]byte) []byte }).Sum(nil)
-		ripemd160Hasher := ripemd160.New()
-		ripemd160Hasher.Write(sha256Result)
-		computedHash := hex.EncodeToString(ripemd160Hasher.Sum(nil))
+		computedHash := ComputeFileHash(sha256Result)
 
 		if computedHash != shard.Hash {
 			// Clean up corrupted file
@@ -337,11 +333,9 @@ func (h *hashValidatingReader) Close() error {
 			return fmt.Errorf("failed to drain remaining stream data: %w", err)
 		}
 
-		// Compute RIPEMD-160(SHA-256(encrypted_data))
+		// Compute RIPEMD-160(SHA-256(encrypted_data)) to match web client
 		sha256Result := h.sha256Hasher.(interface{ Sum([]byte) []byte }).Sum(nil)
-		ripemd160Hasher := ripemd160.New()
-		ripemd160Hasher.Write(sha256Result)
-		computedHash := hex.EncodeToString(ripemd160Hasher.Sum(nil))
+		computedHash := ComputeFileHash(sha256Result)
 
 		if computedHash != h.expectedHash {
 			h.body.Close()
