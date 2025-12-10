@@ -21,13 +21,17 @@ const (
 	TestBucket6 = "0123456789abcdef0123456789abcdef"
 	TestBucket7 = "aabbccddaabbccddaabbccddaabbccdd"
 
-	TestToken           = "test-token-123"
-	TestBasicAuth       = "Basic test-auth"
-	TestFolderUUID      = "folder-uuid-123"
+	TestToken      = "test-token-123"
+	TestBasicAuth  = "Basic test-auth"
+	TestFolderUUID = "folder-uuid-123"
 
-	TestFileName        = "test-file.txt"
-	TestFileID          = "file-id-123"
-	TestFileUUID        = "file-uuid-456"
+	TestFileName      = "test-file.txt"
+	TestFileNameNoExt = "test-file"
+	TestFileID        = "file-id-123"
+	TestFileID2       = "file-id"
+	TestFileUUID      = "file-uuid-456"
+	TestFileUUID2     = "new-file-uuid"
+	TestIndex         = "0123456789abcdef00000123456789abcdef00000123456789abcdef00000000"
 )
 
 // MockMultiEndpointServer manages multiple HTTP endpoints for integration testing.
