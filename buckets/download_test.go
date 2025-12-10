@@ -1,0 +1,589 @@
+package buckets
+
+import (
+	"bytes"
+	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/internxt/rclone-adapter/config"
+	"github.com/internxt/rclone-adapter/endpoints"
+)
+
+func TestGetBucketFileInfo(t *testing.T) {
+	t.Run("successful retrieval", func(t *testing.T) {
+		mockResponse := BucketFileInfo{
+			Bucket:  TestBucket1,
+			Index:   TestIndex,
+			Size:    1024,
+			Version: 1,
+			ID:      TestFileID,
+			Shards: []ShardInfo{
+				{Index: 0, Hash: "hash1", URL: "https://s3.example.com/shard1"},
+			},
+		}
+
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "GET" {
+				t.Errorf("expected GET request, got %s", r.Method)
+			}
+
+			if r.Header.Get("Authorization") == "" {
+				t.Error("Authorization header missing")
+			}
+			if r.Header.Get("internxt-version") != "1.0" {
+				t.Errorf("expected internxt-version 1.0, got %s", r.Header.Get("internxt-version"))
+			}
+			if r.Header.Get("internxt-client") != "internxt-go-sdk" {
+				t.Errorf("expected internxt-client internxt-go-sdk, got %s", r.Header.Get("internxt-client"))
+			}
+
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(mockResponse)
+		}))
+		defer mockServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(mockServer.URL),
+		}
+
+		info, err := GetBucketFileInfo(context.Background(), cfg, TestBucket1, TestFileID)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if info.ID != mockResponse.ID {
+			t.Errorf("expected ID %s, got %s", mockResponse.ID, info.ID)
+		}
+		if len(info.Shards) != 1 {
+			t.Errorf("expected 1 shard, got %d", len(info.Shards))
+		}
+	})
+
+	t.Run("error - 404 not found", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte("not found"))
+		}))
+		defer mockServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(mockServer.URL),
+		}
+
+		_, err := GetBucketFileInfo(context.Background(), cfg, TestBucket1, "non-existent")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "404") {
+			t.Errorf("expected error to contain 404, got %v", err)
+		}
+	})
+
+	t.Run("error - invalid JSON", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("invalid json"))
+		}))
+		defer mockServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(mockServer.URL),
+		}
+
+		_, err := GetBucketFileInfo(context.Background(), cfg, TestBucket1, "file-id")
+		if err == nil {
+			t.Fatal("expected error for invalid JSON, got nil")
+		}
+		if !strings.Contains(err.Error(), "failed to decode") {
+			t.Errorf("expected error to contain 'failed to decode', got %v", err)
+		}
+	})
+}
+
+func TestDownloadFile(t *testing.T) {
+	t.Run("successful download", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		destPath := filepath.Join(tmpDir, "downloaded-file")
+
+		testData := []byte("test file content")
+		plainIndex := TestIndex
+		key, iv, err := GenerateFileKey(TestMnemonic, TestBucket6, plainIndex)
+		if err != nil {
+			t.Fatalf("failed to generate key: %v", err)
+		}
+
+		block, _ := aes.NewCipher(key)
+		stream := cipher.NewCTR(block, iv)
+		encryptedData := make([]byte, len(testData))
+		stream.XORKeyStream(encryptedData, testData)
+
+		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			info := BucketFileInfo{
+				Index: plainIndex,
+				Shards: []ShardInfo{
+					{Index: 0, Hash: "hash1", URL: ""},
+				},
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(info)
+		}))
+		defer infoServer.Close()
+
+		shardServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write(encryptedData)
+		}))
+		defer shardServer.Close()
+
+		infoServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			info := BucketFileInfo{
+				Index: plainIndex,
+				Shards: []ShardInfo{
+					{Index: 0, Hash: "hash1", URL: shardServer.URL},
+				},
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(info)
+		}))
+		defer infoServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(infoServer.URL),
+			Bucket:          TestBucket6,
+			Mnemonic:        TestMnemonic,
+		}
+
+		err = DownloadFile(context.Background(), cfg, TestFileID, destPath)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		downloadedData, err := os.ReadFile(destPath)
+		if err != nil {
+			t.Fatalf("failed to read downloaded file: %v", err)
+		}
+
+		if !bytes.Equal(downloadedData, testData) {
+			t.Errorf("expected file content %q, got %q", string(testData), string(downloadedData))
+		}
+	})
+
+	t.Run("error - no shards", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			info := BucketFileInfo{
+				Index:  TestIndex,
+				Shards: []ShardInfo{},
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(info)
+		}))
+		defer mockServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(mockServer.URL),
+			Bucket:          TestBucket6,
+			Mnemonic:        TestMnemonic,
+		}
+
+		tmpDir := t.TempDir()
+		destPath := filepath.Join(tmpDir, "downloaded-file")
+
+		err := DownloadFile(context.Background(), cfg, TestFileID, destPath)
+		if err == nil {
+			t.Fatal("expected error for no shards, got nil")
+		}
+		if !strings.Contains(err.Error(), "no shards found") {
+			t.Errorf("expected error to contain 'no shards found', got %v", err)
+		}
+	})
+
+	t.Run("error - shard download failure", func(t *testing.T) {
+		plainIndex := TestIndex
+
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.Contains(r.URL.Path, "/info") {
+				info := BucketFileInfo{
+					Index: plainIndex,
+					Shards: []ShardInfo{
+						{Index: 0, Hash: "hash1", URL: "http://invalid-url-that-will-fail"},
+					},
+				}
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(info)
+			}
+		}))
+		defer mockServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(mockServer.URL),
+			Bucket:          TestBucket6,
+			Mnemonic:        TestMnemonic,
+		}
+
+		tmpDir := t.TempDir()
+		destPath := filepath.Join(tmpDir, "downloaded-file")
+
+		err := DownloadFile(context.Background(), cfg, TestFileID, destPath)
+		if err == nil {
+			t.Fatal("expected error for shard download failure, got nil")
+		}
+	})
+}
+
+func TestGetStartByteAndEndByte(t *testing.T) {
+	testCases := []struct {
+		name          string
+		rangeHeader   string
+		expectedStart int
+		expectedEnd   int
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:          "valid range with end byte",
+			rangeHeader:   "bytes=100-199",
+			expectedStart: 100,
+			expectedEnd:   199,
+			expectError:   false,
+		},
+		{
+			name:          "valid range without end byte",
+			rangeHeader:   "bytes=100-",
+			expectedStart: 100,
+			expectedEnd:   -1,
+			expectError:   false,
+		},
+		{
+			name:          "range starting at zero",
+			rangeHeader:   "bytes=0-99",
+			expectedStart: 0,
+			expectedEnd:   99,
+			expectError:   false,
+		},
+		{
+			name:          "invalid - missing bytes= prefix",
+			rangeHeader:   "100-199",
+			expectError:   true,
+			errorContains: "invalid Range header format",
+		},
+		{
+			name:          "invalid - wrong format",
+			rangeHeader:   "bytes=100",
+			expectError:   true,
+			errorContains: "invalid Range header format",
+		},
+		{
+			name:          "invalid - multiple ranges",
+			rangeHeader:   "bytes=0-99,200-299",
+			expectError:   true,
+			errorContains: "invalid Range header format",
+		},
+		{
+			name:          "invalid - negative start",
+			rangeHeader:   "bytes=-200",
+			expectError:   true,
+			errorContains: "invalid start byte",
+		},
+		{
+			name:          "invalid - non-numeric start",
+			rangeHeader:   "bytes=abc-199",
+			expectError:   true,
+			errorContains: "invalid start byte",
+		},
+		{
+			name:          "invalid - non-numeric end",
+			rangeHeader:   "bytes=100-abc",
+			expectError:   true,
+			errorContains: "invalid end byte",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			start, end, err := getStartByteAndEndByte(tc.rangeHeader)
+
+			if tc.expectError {
+				if err == nil {
+					t.Error("expected error, got nil")
+				}
+				if tc.errorContains != "" && !strings.Contains(err.Error(), tc.errorContains) {
+					t.Errorf("expected error to contain %q, got %q", tc.errorContains, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if start != tc.expectedStart {
+					t.Errorf("expected start %d, got %d", tc.expectedStart, start)
+				}
+				if end != tc.expectedEnd {
+					t.Errorf("expected end %d, got %d", tc.expectedEnd, end)
+				}
+			}
+		})
+	}
+}
+
+func TestAdjustIV(t *testing.T) {
+	t.Run("increment by one block", func(t *testing.T) {
+		iv := make([]byte, 16)
+		originalIV := make([]byte, 16)
+		copy(originalIV, iv)
+
+		adjustIV(iv, 1)
+
+		// IV should be incremented by 1
+		expected := make([]byte, 16)
+		copy(expected, originalIV)
+		expected[15]++
+
+		if !bytes.Equal(iv, expected) {
+			t.Errorf("expected IV to be incremented, got %v, expected %v", iv, expected)
+		}
+	})
+
+	t.Run("increment by multiple blocks", func(t *testing.T) {
+		iv := make([]byte, 16)
+		iv[15] = 255 // Set last byte to max to test carry-over
+
+		adjustIV(iv, 1)
+
+		if iv[15] != 0 {
+			t.Errorf("expected last byte to wrap to 0, got %d", iv[15])
+		}
+		if iv[14] != 1 {
+			t.Errorf("expected second-to-last byte to increment, got %d", iv[14])
+		}
+	})
+
+	t.Run("increment by zero blocks", func(t *testing.T) {
+		iv := make([]byte, 16)
+		originalIV := make([]byte, 16)
+		copy(originalIV, iv)
+
+		adjustIV(iv, 0)
+
+		if !bytes.Equal(iv, originalIV) {
+			t.Error("expected IV to remain unchanged when incrementing by 0 blocks")
+		}
+	})
+
+	t.Run("increment by large number", func(t *testing.T) {
+		iv := make([]byte, 16)
+		originalIV := make([]byte, 16)
+		copy(originalIV, iv)
+
+		adjustIV(iv, 100)
+
+		// IV should be incremented by 100
+		expected := make([]byte, 16)
+		copy(expected, originalIV)
+		expected[15] += 100
+
+		if !bytes.Equal(iv, expected) {
+			t.Errorf("expected IV to be incremented by 100, got %v", iv)
+		}
+	})
+}
+
+func TestDownloadFileStream(t *testing.T) {
+	t.Run("successful stream download without range", func(t *testing.T) {
+		testData := []byte("test file content for streaming")
+		plainIndex := TestIndex
+		key, iv, err := GenerateFileKey(TestMnemonic, TestBucket6, plainIndex)
+		if err != nil {
+			t.Fatalf("failed to generate key: %v", err)
+		}
+
+		block, _ := aes.NewCipher(key)
+		stream := cipher.NewCTR(block, iv)
+		encryptedData := make([]byte, len(testData))
+		stream.XORKeyStream(encryptedData, testData)
+
+		shardServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write(encryptedData)
+		}))
+		defer shardServer.Close()
+
+		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			info := BucketFileInfo{
+				Index: plainIndex,
+				Shards: []ShardInfo{
+					{Index: 0, Hash: "hash1", URL: shardServer.URL},
+				},
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(info)
+		}))
+		defer infoServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(infoServer.URL),
+			Bucket:          TestBucket6,
+			Mnemonic:        TestMnemonic,
+		}
+
+		readCloser, err := DownloadFileStream(context.Background(), cfg, TestFileID)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		defer readCloser.Close()
+
+		downloadedData, err := io.ReadAll(readCloser)
+		if err != nil {
+			t.Fatalf("failed to read stream: %v", err)
+		}
+
+		if !bytes.Equal(downloadedData, testData) {
+			t.Errorf("expected content %q, got %q", string(testData), string(downloadedData))
+		}
+	})
+
+	t.Run("successful stream download with range", func(t *testing.T) {
+		testData := make([]byte, 100)
+		rand.Read(testData)
+		plainIndex := TestIndex
+		key, iv, err := GenerateFileKey(TestMnemonic, TestBucket6, plainIndex)
+		if err != nil {
+			t.Fatalf("failed to generate key: %v", err)
+		}
+
+		block, _ := aes.NewCipher(key)
+		encryptStream := cipher.NewCTR(block, iv)
+		encryptedData := make([]byte, len(testData))
+		encryptStream.XORKeyStream(encryptedData, testData)
+
+		shardServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			rangeHeader := r.Header.Get("Range")
+			if rangeHeader == "" {
+				w.WriteHeader(http.StatusOK)
+				w.Write(encryptedData)
+				return
+			}
+			w.Header().Set("Content-Range", "bytes 10-49/100")
+			w.WriteHeader(http.StatusPartialContent)
+			w.Write(encryptedData[10:50])
+		}))
+		defer shardServer.Close()
+
+		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			info := BucketFileInfo{
+				Index: plainIndex,
+				Shards: []ShardInfo{
+					{Index: 0, Hash: "hash1", URL: shardServer.URL},
+				},
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(info)
+		}))
+		defer infoServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(infoServer.URL),
+			Bucket:          TestBucket6,
+			Mnemonic:        TestMnemonic,
+		}
+
+		readCloser, err := DownloadFileStream(context.Background(), cfg, TestFileID, "bytes=16-47")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		defer readCloser.Close()
+
+		downloadedData, err := io.ReadAll(readCloser)
+		if err != nil {
+			t.Fatalf("failed to read stream: %v", err)
+		}
+
+		if len(downloadedData) == 0 {
+			t.Error("expected non-empty downloaded data")
+		}
+	})
+
+	t.Run("error - invalid range format", func(t *testing.T) {
+		plainIndex := TestIndex
+
+		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			info := BucketFileInfo{
+				Index: plainIndex,
+				Shards: []ShardInfo{
+					{Index: 0, Hash: "hash1", URL: "http://test"},
+				},
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(info)
+		}))
+		defer infoServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(infoServer.URL),
+			Bucket:          TestBucket6,
+			Mnemonic:        TestMnemonic,
+		}
+
+		_, err := DownloadFileStream(context.Background(), cfg, TestFileID, "invalid-range")
+		if err == nil {
+			t.Fatal("expected error for invalid range, got nil")
+		}
+		if !strings.Contains(err.Error(), "invalid range") {
+			t.Errorf("expected error to contain 'invalid range', got %v", err)
+		}
+	})
+
+	t.Run("error - no shards", func(t *testing.T) {
+		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			info := BucketFileInfo{
+				Index:  TestIndex,
+				Shards: []ShardInfo{},
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(info)
+		}))
+		defer infoServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(infoServer.URL),
+			Bucket:          TestBucket6,
+			Mnemonic:        TestMnemonic,
+		}
+
+		_, err := DownloadFileStream(context.Background(), cfg, TestFileID)
+		if err == nil {
+			t.Fatal("expected error for no shards, got nil")
+		}
+		if !strings.Contains(err.Error(), "no shards found") {
+			t.Errorf("expected error to contain 'no shards found', got %v", err)
+		}
+	})
+}
