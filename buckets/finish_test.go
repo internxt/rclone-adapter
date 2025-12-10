@@ -1,8 +1,8 @@
 package buckets
 
 import (
-	"encoding/json"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -36,13 +36,13 @@ func TestFinishMultipartUpload(t *testing.T) {
 				},
 			},
 			mockResponse: FinishUploadResp{
-				Bucket:   "test-bucket",
+				Bucket:   TestBucket1,
 				Index:    "0123456789abcdef",
-				ID:       "file-id-123",
+				ID:       TestFileID,
 				Version:  1,
 				Created:  "2025-01-01T00:00:00Z",
 				Mimetype: "application/octet-stream",
-				Filename: "test-file",
+				Filename: TestFileNameNoExt,
 			},
 			mockStatusCode: http.StatusOK,
 			expectError:    false,
@@ -207,7 +207,7 @@ func TestFinishMultipartUpload(t *testing.T) {
 			}
 
 			// Call FinishMultipartUpload
-			result, err := FinishMultipartUpload(context.Background(), cfg, "test-bucket", "test-index", tc.shard)
+			result, err := FinishMultipartUpload(context.Background(), cfg, TestBucket1, "test-index", tc.shard)
 
 			// Verify results
 			if tc.expectError {
@@ -249,7 +249,7 @@ func TestFinishMultipartUploadPayloadStructure(t *testing.T) {
 	defer mockServer.Close()
 
 	cfg := &config.Config{
-		BasicAuthHeader: "Basic test",
+		BasicAuthHeader: TestBasicAuth,
 		HTTPClient:      &http.Client{},
 		Endpoints:       endpoints.NewConfig(mockServer.URL),
 	}
@@ -318,7 +318,7 @@ func TestFinishMultipartUploadEmptyParts(t *testing.T) {
 	defer mockServer.Close()
 
 	cfg := &config.Config{
-		BasicAuthHeader: "Basic test",
+		BasicAuthHeader: TestBasicAuth,
 		HTTPClient:      &http.Client{},
 		Endpoints:       endpoints.NewConfig(mockServer.URL),
 	}
