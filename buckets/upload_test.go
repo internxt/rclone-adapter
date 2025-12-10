@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,74 +16,11 @@ import (
 	"github.com/internxt/rclone-adapter/endpoints"
 )
 
-// Test constants for upload tests (testMnemonic is defined in multipart_test.go)
-const (
-	testBucket1 = "deadbeefdeadbeefdeadbeefdeadbeef"
-	testBucket2  = "cafebabecafebabecafebabecafebabe"
-	testBucket3  = "1234567890abcdef1234567890abcdef"
-	testBucket4  = "fedcba9876543210fedcba9876543210"
-	testBucket5  = "abcdef1234567890abcdef1234567890"
-	testBucket6  = "0123456789abcdef0123456789abcdef"
-	testBucket7  = "aabbccddaabbccddaabbccddaabbccdd"
-)
-
-// mockMultiEndpointServer manages multiple HTTP endpoints for integration testing
-type mockMultiEndpointServer struct {
-	startHandler       http.HandlerFunc
-	transferHandler    http.HandlerFunc
-	finishHandler      http.HandlerFunc
-	createMetaHandler  http.HandlerFunc
-	multipartStartHandler http.HandlerFunc
-	server            *httptest.Server
-}
+// mockMultiEndpointServer is an alias for MockMultiEndpointServer
+type mockMultiEndpointServer = MockMultiEndpointServer
 
 func newMockMultiEndpointServer() *mockMultiEndpointServer {
-	m := &mockMultiEndpointServer{}
-
-	mux := http.NewServeMux()
-
-	// Route handlers based on path
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Path
-		// Route based on the path
-		switch {
-		case strings.Contains(path, "/v2/buckets/") && strings.Contains(path, "/files/start"):
-			// StartUpload: POST /network/v2/buckets/{bucket}/files/start
-			if m.startHandler != nil {
-				m.startHandler(w, r)
-			} else if m.multipartStartHandler != nil {
-				m.multipartStartHandler(w, r)
-			}
-		case strings.Contains(path, "/v2/buckets/") && strings.Contains(path, "/files/finish"):
-			// FinishUpload: POST /network/v2/buckets/{bucket}/files/finish
-			if m.finishHandler != nil {
-				m.finishHandler(w, r)
-			}
-		case strings.Contains(path, "/upload"):
-			// Transfer: PUT to storage URL
-			if m.transferHandler != nil {
-				m.transferHandler(w, r)
-			}
-		case path == "/drive/files":
-			// CreateMetaFile: POST /drive/files
-			if m.createMetaHandler != nil {
-				m.createMetaHandler(w, r)
-			}
-		default:
-			http.NotFound(w, r)
-		}
-	})
-
-	m.server = httptest.NewServer(mux)
-	return m
-}
-
-func (m *mockMultiEndpointServer) Close() {
-	m.server.Close()
-}
-
-func (m *mockMultiEndpointServer) URL() string {
-	return m.server.URL
+	return NewMockMultiEndpointServer()
 }
 
 // TestUploadFile tests the complete file upload workflow from a file path
@@ -98,12 +34,12 @@ func TestUploadFile(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name              string
-		filePath          string
-		setupMock         func(*mockMultiEndpointServer)
-		expectError       bool
-		errorContains     string
-		setupConfig       func(*config.Config)
+		name          string
+		filePath      string
+		setupMock     func(*mockMultiEndpointServer)
+		expectError   bool
+		errorContains string
+		setupConfig   func(*config.Config)
 	}{
 		{
 			name:     "successful upload",
@@ -133,8 +69,8 @@ func TestUploadFile(t *testing.T) {
 				// FinishUpload handler
 				m.finishHandler = func(w http.ResponseWriter, r *http.Request) {
 					resp := FinishUploadResp{
-						ID:      "file-id-123",
-						Bucket:  "test-bucket",
+						ID:      TestFileID,
+						Bucket:  TestBucket1,
 						Index:   "test-index",
 						Created: "2025-01-01T00:00:00Z",
 					}
@@ -145,8 +81,8 @@ func TestUploadFile(t *testing.T) {
 				// CreateMetaFile handler
 				m.createMetaHandler = func(w http.ResponseWriter, r *http.Request) {
 					resp := CreateMetaResponse{
-						UUID:   "file-uuid-456",
-						FileID: "file-id-123",
+						UUID:   TestFileUUID,
+						FileID: TestFileID,
 						Name:   "test-file",
 						Type:   "txt",
 					}
@@ -255,10 +191,10 @@ func TestUploadFile(t *testing.T) {
 			tc.setupMock(mockServer)
 
 			cfg := &config.Config{
-				Mnemonic:        testMnemonic,
-				Bucket:          testBucket1,
-				Token:           "test-token",
-				BasicAuthHeader: "Basic test-auth",
+				Mnemonic:        TestMnemonic,
+				Bucket:          TestBucket1,
+				Token:           TestToken,
+				BasicAuthHeader: TestBasicAuth,
 				HTTPClient:      &http.Client{},
 				Endpoints:       endpoints.NewConfig(mockServer.URL()),
 			}
@@ -370,16 +306,16 @@ func TestUploadFileStream(t *testing.T) {
 			tc.setupMock(mockServer)
 
 			cfg := &config.Config{
-				Mnemonic:        testMnemonic,
-				Bucket:          testBucket2,
-				Token:           "stream-token",
-				BasicAuthHeader: "Basic stream-auth",
+				Mnemonic:        TestMnemonic,
+				Bucket:          TestBucket2,
+				Token:           TestToken,
+				BasicAuthHeader: TestBasicAuth,
 				HTTPClient:      &http.Client{},
 				Endpoints:       endpoints.NewConfig(mockServer.URL()),
 			}
 
 			reader := bytes.NewReader(tc.content)
-			result, err := UploadFileStream(context.Background(), cfg, "folder-uuid", tc.fileName, reader, int64(len(tc.content)), time.Now())
+			result, err := UploadFileStream(context.Background(), cfg, TestFolderUUID, tc.fileName, reader, int64(len(tc.content)), time.Now())
 
 			if tc.expectError {
 				if err == nil {
@@ -516,16 +452,16 @@ func TestUploadFileStreamMultipart(t *testing.T) {
 			tc.setupMock(mockServer)
 
 			cfg := &config.Config{
-				Mnemonic:        testMnemonic,
-				Bucket:          testBucket3,
-				Token:           "multipart-token",
-				BasicAuthHeader: "Basic multipart-auth",
+				Mnemonic:        TestMnemonic,
+				Bucket:          TestBucket3,
+				Token:           TestToken,
+				BasicAuthHeader: TestBasicAuth,
 				HTTPClient:      &http.Client{},
 				Endpoints:       endpoints.NewConfig(mockServer.URL()),
 			}
 
 			reader := bytes.NewReader(tc.content)
-			result, err := UploadFileStreamMultipart(context.Background(), cfg, "folder-uuid", tc.fileName, reader, int64(len(tc.content)), time.Now())
+			result, err := UploadFileStreamMultipart(context.Background(), cfg, TestFolderUUID, tc.fileName, reader, int64(len(tc.content)), time.Now())
 
 			if tc.expectError {
 				if err == nil {
@@ -620,10 +556,10 @@ func TestUploadFileStreamAuto(t *testing.T) {
 			tc.setupMock(mockServer)
 
 			cfg := &config.Config{
-				Mnemonic:        testMnemonic,
-				Bucket:          testBucket4,
-				Token:           "auto-token",
-				BasicAuthHeader: "Basic auto-auth",
+				Mnemonic:        TestMnemonic,
+				Bucket:          TestBucket4,
+				Token:           TestToken,
+				BasicAuthHeader: TestBasicAuth,
 				HTTPClient:      &http.Client{},
 				Endpoints:       endpoints.NewConfig(mockServer.URL()),
 			}
@@ -631,7 +567,7 @@ func TestUploadFileStreamAuto(t *testing.T) {
 			content := make([]byte, tc.fileSize)
 			reader := bytes.NewReader(content)
 
-			result, err := UploadFileStreamAuto(context.Background(), cfg, "folder-uuid", "auto-file.dat", reader, tc.fileSize, time.Now())
+			result, err := UploadFileStreamAuto(context.Background(), cfg, TestFolderUUID, "auto-file.dat", reader, tc.fileSize, time.Now())
 
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -653,14 +589,14 @@ func TestUploadFileInvalidMnemonic(t *testing.T) {
 	// BIP39 doesn't reject "invalid" mnemonics so this won't error
 	cfg := &config.Config{
 		Mnemonic:        "invalid mnemonic phrase that is not standard",
-		Bucket:          testBucket5,
-		Token:           "token",
-		BasicAuthHeader: "Basic auth",
+		Bucket:          TestBucket5,
+		Token:           TestToken,
+		BasicAuthHeader: TestBasicAuth,
 		HTTPClient:      &http.Client{Timeout: 1},
 		Endpoints:       endpoints.NewConfig("http://localhost"),
 	}
 
-	_, err := UploadFile(context.Background(), cfg, testFilePath, "folder-uuid", time.Now())
+	_, err := UploadFile(context.Background(), cfg, testFilePath, TestFolderUUID, time.Now())
 	if err == nil {
 		t.Error("expected error due to no server, got nil")
 	}
@@ -676,10 +612,10 @@ func TestUploadFileStreamContextCancellation(t *testing.T) {
 	cancel() // Cancel immediately
 
 	cfg := &config.Config{
-		Mnemonic:        testMnemonic,
-		Bucket:          testBucket6,
-		Token:           "token",
-		BasicAuthHeader: "Basic auth",
+		Mnemonic:        TestMnemonic,
+		Bucket:          TestBucket6,
+		Token:           TestToken,
+		BasicAuthHeader: TestBasicAuth,
 		HTTPClient:      &http.Client{},
 		Endpoints:       endpoints.NewConfig("http://localhost"),
 	}
@@ -687,7 +623,7 @@ func TestUploadFileStreamContextCancellation(t *testing.T) {
 	content := []byte("test content")
 	reader := bytes.NewReader(content)
 
-	_, err := UploadFileStream(ctx, cfg, "folder-uuid", "test.txt", reader, int64(len(content)), time.Now())
+	_, err := UploadFileStream(ctx, cfg, TestFolderUUID, "test.txt", reader, int64(len(content)), time.Now())
 	if err == nil {
 		t.Error("expected error due to cancelled context, got nil")
 	}
@@ -727,26 +663,26 @@ func TestUploadFileNameParsing(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 			}
 			mockServer.finishHandler = func(w http.ResponseWriter, r *http.Request) {
-				json.NewEncoder(w).Encode(FinishUploadResp{ID: "file-id"})
+				json.NewEncoder(w).Encode(FinishUploadResp{ID: TestFileID})
 			}
 			mockServer.createMetaHandler = func(w http.ResponseWriter, r *http.Request) {
 				var req CreateMetaRequest
 				json.NewDecoder(r.Body).Decode(&req)
 				capturedName = req.PlainName
 				capturedType = req.Type
-				json.NewEncoder(w).Encode(CreateMetaResponse{UUID: "uuid", FileID: "file-id"})
+				json.NewEncoder(w).Encode(CreateMetaResponse{UUID: "uuid", FileID: TestFileID})
 			}
 
 			cfg := &config.Config{
-				Mnemonic:        testMnemonic,
-				Bucket:          testBucket7,
-				Token:           "token",
-				BasicAuthHeader: "Basic auth",
+				Mnemonic:        TestMnemonic,
+				Bucket:          TestBucket7,
+				Token:           TestToken,
+				BasicAuthHeader: TestBasicAuth,
 				HTTPClient:      &http.Client{},
 				Endpoints:       endpoints.NewConfig(mockServer.URL()),
 			}
 
-			_, err := UploadFile(context.Background(), cfg, testFilePath, "folder-uuid", time.Now())
+			_, err := UploadFile(context.Background(), cfg, testFilePath, TestFolderUUID, time.Now())
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
