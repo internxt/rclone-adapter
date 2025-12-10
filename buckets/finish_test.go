@@ -201,16 +201,13 @@ func TestFinishMultipartUpload(t *testing.T) {
 
 			// Create config with mock endpoint
 			cfg := &config.Config{
-				BasicAuthHeader: "Basic test-auth",
+				BasicAuthHeader: TestBasicAuth,
 				HTTPClient:      &http.Client{},
 				Endpoints:       endpoints.NewConfig(mockServer.URL),
 			}
 
 			// Call FinishMultipartUpload
 			result, err := FinishMultipartUpload(context.Background(), cfg, "test-bucket", "test-index", tc.shard)
-			if err != nil {
-				t.Fatalf("FinishMultipartUpload failed: %v", err)
-			}
 
 			// Verify results
 			if tc.expectError {

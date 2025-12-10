@@ -1,8 +1,8 @@
 package buckets
 
 import (
-	"encoding/json"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -124,7 +124,7 @@ func TestStartUploadMultipart(t *testing.T) {
 			defer mockServer.Close()
 
 			cfg := &config.Config{
-				BasicAuthHeader: "Basic test-auth",
+				BasicAuthHeader: TestBasicAuth,
 				HTTPClient:      &http.Client{},
 				Endpoints:       endpoints.NewConfig(mockServer.URL),
 			}
