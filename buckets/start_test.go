@@ -495,3 +495,99 @@ func TestStartUploadJSONMarshalError(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+// TestStartUploadInvalidJSONResponse tests handling of invalid JSON in response
+func TestStartUploadInvalidJSONResponse(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("invalid json {{{"))
+	}))
+	defer mockServer.Close()
+
+	cfg := &config.Config{
+		BasicAuthHeader: TestBasicAuth,
+		HTTPClient:      &http.Client{},
+		Endpoints:       endpoints.NewConfig(mockServer.URL),
+	}
+
+	specs := []UploadPartSpec{
+		{Index: 0, Size: 10 * 1024 * 1024},
+	}
+
+	_, err := StartUpload(context.Background(), cfg, TestBucket1, specs)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON response, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to unmarshal") {
+		t.Errorf("expected error to contain 'failed to unmarshal', got: %v", err)
+	}
+}
+
+// TestStartUploadContextCancellation tests context cancellation handling
+func TestStartUploadContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	cfg := &config.Config{
+		BasicAuthHeader: TestBasicAuth,
+		HTTPClient:      &http.Client{},
+		Endpoints:       endpoints.NewConfig("http://localhost:9999"),
+	}
+
+	specs := []UploadPartSpec{
+		{Index: 0, Size: 10 * 1024 * 1024},
+	}
+
+	_, err := StartUpload(ctx, cfg, TestBucket1, specs)
+	if err == nil {
+		t.Error("expected error for cancelled context, got nil")
+	}
+}
+
+// TestStartUploadMultipartInvalidJSONResponse tests handling of invalid JSON in multipart response
+func TestStartUploadMultipartInvalidJSONResponse(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("invalid json response"))
+	}))
+	defer mockServer.Close()
+
+	cfg := &config.Config{
+		BasicAuthHeader: TestBasicAuth,
+		HTTPClient:      &http.Client{},
+		Endpoints:       endpoints.NewConfig(mockServer.URL),
+	}
+
+	specs := []UploadPartSpec{
+		{Index: 0, Size: 100 * 1024 * 1024},
+	}
+
+	_, err := StartUploadMultipart(context.Background(), cfg, TestBucket1, specs, 4)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON response, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to unmarshal") {
+		t.Errorf("expected error to contain 'failed to unmarshal', got: %v", err)
+	}
+}
+
+// TestStartUploadMultipartContextCancellation tests context cancellation for multipart
+func TestStartUploadMultipartContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	cfg := &config.Config{
+		BasicAuthHeader: TestBasicAuth,
+		HTTPClient:      &http.Client{},
+		Endpoints:       endpoints.NewConfig("http://localhost:9999"),
+	}
+
+	specs := []UploadPartSpec{
+		{Index: 0, Size: 100 * 1024 * 1024},
+	}
+
+	_, err := StartUploadMultipart(ctx, cfg, TestBucket1, specs, 4)
+	if err == nil {
+		t.Error("expected error for cancelled context, got nil")
+	}
+}
