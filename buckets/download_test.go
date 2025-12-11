@@ -250,6 +250,158 @@ func TestDownloadFile(t *testing.T) {
 			t.Fatal("expected error for shard download failure, got nil")
 		}
 	})
+
+	t.Run("error - shard returns non-2xx status", func(t *testing.T) {
+		plainIndex := TestIndex
+
+		shardServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte("shard not found"))
+		}))
+		defer shardServer.Close()
+
+		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			info := BucketFileInfo{
+				Index: plainIndex,
+				Shards: []ShardInfo{
+					{Index: 0, Hash: "hash1", URL: shardServer.URL},
+				},
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(info)
+		}))
+		defer infoServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(infoServer.URL),
+			Bucket:          TestBucket6,
+			Mnemonic:        TestMnemonic,
+		}
+
+		tmpDir := t.TempDir()
+		destPath := filepath.Join(tmpDir, "downloaded-file")
+
+		err := DownloadFile(context.Background(), cfg, TestFileID, destPath)
+		if err == nil {
+			t.Fatal("expected error for non-2xx status, got nil")
+		}
+		if !strings.Contains(err.Error(), "shard download failed") {
+			t.Errorf("expected error to contain 'shard download failed', got %v", err)
+		}
+		if !strings.Contains(err.Error(), "404") {
+			t.Errorf("expected error to contain '404', got %v", err)
+		}
+	})
+
+	t.Run("error - invalid destination path", func(t *testing.T) {
+		plainIndex := TestIndex
+		testData := []byte("test file content")
+		key, iv, _ := GenerateFileKey(TestMnemonic, TestBucket6, plainIndex)
+
+		block, _ := aes.NewCipher(key)
+		stream := cipher.NewCTR(block, iv)
+		encryptedData := make([]byte, len(testData))
+		stream.XORKeyStream(encryptedData, testData)
+
+		shardServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write(encryptedData)
+		}))
+		defer shardServer.Close()
+
+		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			info := BucketFileInfo{
+				Index: plainIndex,
+				Shards: []ShardInfo{
+					{Index: 0, Hash: "hash1", URL: shardServer.URL},
+				},
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(info)
+		}))
+		defer infoServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(infoServer.URL),
+			Bucket:          TestBucket6,
+			Mnemonic:        TestMnemonic,
+		}
+
+		// Use an invalid path (directory that doesn't exist)
+		destPath := "/nonexistent/directory/that/does/not/exist/file.txt"
+
+		err := DownloadFile(context.Background(), cfg, TestFileID, destPath)
+		if err == nil {
+			t.Fatal("expected error for invalid destination path, got nil")
+		}
+		if !strings.Contains(err.Error(), "failed to create destination file") {
+			t.Errorf("expected error to contain 'failed to create destination file', got %v", err)
+		}
+	})
+
+	t.Run("error - get bucket file info fails", func(t *testing.T) {
+		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("server error"))
+		}))
+		defer infoServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(infoServer.URL),
+			Bucket:          TestBucket6,
+			Mnemonic:        TestMnemonic,
+		}
+
+		tmpDir := t.TempDir()
+		destPath := filepath.Join(tmpDir, "downloaded-file")
+
+		err := DownloadFile(context.Background(), cfg, TestFileID, destPath)
+		if err == nil {
+			t.Fatal("expected error when get bucket file info fails, got nil")
+		}
+		if !strings.Contains(err.Error(), "failed to get bucket file info") {
+			t.Errorf("expected error to contain 'failed to get bucket file info', got %v", err)
+		}
+	})
+
+	t.Run("error - generate file key fails with invalid index", func(t *testing.T) {
+		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			info := BucketFileInfo{
+				Index: "invalid-hex-zzz",
+				Shards: []ShardInfo{
+					{Index: 0, Hash: "hash1", URL: "http://test"},
+				},
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(info)
+		}))
+		defer infoServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(infoServer.URL),
+			Bucket:          TestBucket6,
+			Mnemonic:        TestMnemonic,
+		}
+
+		tmpDir := t.TempDir()
+		destPath := filepath.Join(tmpDir, "downloaded-file")
+
+		err := DownloadFile(context.Background(), cfg, TestFileID, destPath)
+		if err == nil {
+			t.Fatal("expected error when generate file key fails, got nil")
+		}
+		if !strings.Contains(err.Error(), "failed to generate file key") {
+			t.Errorf("expected error to contain 'failed to generate file key', got %v", err)
+		}
+	})
 }
 
 func TestGetStartByteAndEndByte(t *testing.T) {
@@ -584,6 +736,162 @@ func TestDownloadFileStream(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "no shards found") {
 			t.Errorf("expected error to contain 'no shards found', got %v", err)
+		}
+	})
+
+	t.Run("error - get bucket file info fails", func(t *testing.T) {
+		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("internal error"))
+		}))
+		defer infoServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(infoServer.URL),
+			Bucket:          TestBucket6,
+			Mnemonic:        TestMnemonic,
+		}
+
+		_, err := DownloadFileStream(context.Background(), cfg, TestFileID)
+		if err == nil {
+			t.Fatal("expected error when get bucket file info fails, got nil")
+		}
+		if !strings.Contains(err.Error(), "failed to get bucket file info") {
+			t.Errorf("expected error to contain 'failed to get bucket file info', got %v", err)
+		}
+	})
+
+	t.Run("error - generate file key fails with invalid index", func(t *testing.T) {
+		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			info := BucketFileInfo{
+				Index: "invalid-hex-index-zzz",
+				Shards: []ShardInfo{
+					{Index: 0, Hash: "hash1", URL: "http://test"},
+				},
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(info)
+		}))
+		defer infoServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(infoServer.URL),
+			Bucket:          TestBucket6,
+			Mnemonic:        TestMnemonic,
+		}
+
+		_, err := DownloadFileStream(context.Background(), cfg, TestFileID)
+		if err == nil {
+			t.Fatal("expected error when generate file key fails, got nil")
+		}
+		if !strings.Contains(err.Error(), "failed to generate file key") {
+			t.Errorf("expected error to contain 'failed to generate file key', got %v", err)
+		}
+	})
+
+	t.Run("error - shard download HTTP client fails", func(t *testing.T) {
+		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			info := BucketFileInfo{
+				Index: TestIndex,
+				Shards: []ShardInfo{
+					{Index: 0, Hash: "hash1", URL: "http://invalid-host-that-does-not-exist-12345.local"},
+				},
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(info)
+		}))
+		defer infoServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(infoServer.URL),
+			Bucket:          TestBucket6,
+			Mnemonic:        TestMnemonic,
+		}
+
+		_, err := DownloadFileStream(context.Background(), cfg, TestFileID)
+		if err == nil {
+			t.Fatal("expected error when shard download fails, got nil")
+		}
+		if !strings.Contains(err.Error(), "failed to execute download stream request") {
+			t.Errorf("expected error to contain 'failed to execute download stream request', got %v", err)
+		}
+	})
+
+	t.Run("error - shard download returns non-2xx status", func(t *testing.T) {
+		shardServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte("shard not found"))
+		}))
+		defer shardServer.Close()
+
+		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			info := BucketFileInfo{
+				Index: TestIndex,
+				Shards: []ShardInfo{
+					{Index: 0, Hash: "hash1", URL: shardServer.URL},
+				},
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(info)
+		}))
+		defer infoServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(infoServer.URL),
+			Bucket:          TestBucket6,
+			Mnemonic:        TestMnemonic,
+		}
+
+		_, err := DownloadFileStream(context.Background(), cfg, TestFileID)
+		if err == nil {
+			t.Fatal("expected error when shard download returns 404, got nil")
+		}
+		if !strings.Contains(err.Error(), "shard download failed") {
+			t.Errorf("expected error to contain 'shard download failed', got %v", err)
+		}
+		if !strings.Contains(err.Error(), "404") {
+			t.Errorf("expected error to contain '404', got %v", err)
+		}
+	})
+
+	t.Run("error - decrypt reader fails with wrong key size", func(t *testing.T) {
+		shardServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("encrypted data"))
+		}))
+		defer shardServer.Close()
+
+		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			info := BucketFileInfo{
+				Index: "bad-index-short",
+				Shards: []ShardInfo{
+					{Index: 0, Hash: "hash1", URL: shardServer.URL},
+				},
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(info)
+		}))
+		defer infoServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(infoServer.URL),
+			Bucket:          TestBucket6,
+			Mnemonic:        TestMnemonic,
+		}
+
+		_, err := DownloadFileStream(context.Background(), cfg, TestFileID)
+		if err == nil {
+			t.Fatal("expected error when decrypt reader fails, got nil")
 		}
 	})
 }
