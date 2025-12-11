@@ -894,4 +894,220 @@ func TestDownloadFileStream(t *testing.T) {
 			t.Fatal("expected error when decrypt reader fails, got nil")
 		}
 	})
+
+	t.Run("successful stream with unaligned range (triggers recursive adjustment)", func(t *testing.T) {
+		testData := make([]byte, 128)
+		rand.Read(testData)
+		plainIndex := TestIndex
+		key, iv, err := GenerateFileKey(TestMnemonic, TestBucket6, plainIndex)
+		if err != nil {
+			t.Fatalf("failed to generate key: %v", err)
+		}
+
+		block, _ := aes.NewCipher(key)
+		encryptStream := cipher.NewCTR(block, iv)
+		encryptedData := make([]byte, len(testData))
+		encryptStream.XORKeyStream(encryptedData, testData)
+
+		callCount := 0
+		shardServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			callCount++
+			rangeHeader := r.Header.Get("Range")
+			if rangeHeader == "" {
+				w.WriteHeader(http.StatusOK)
+				w.Write(encryptedData)
+				return
+			}
+
+			// Handle adjusted aligned range request
+			if strings.Contains(rangeHeader, "bytes=16-63") {
+				w.Header().Set("Content-Range", "bytes 16-63/128")
+				w.WriteHeader(http.StatusPartialContent)
+				w.Write(encryptedData[16:64])
+				return
+			}
+
+			w.WriteHeader(http.StatusBadRequest)
+		}))
+		defer shardServer.Close()
+
+		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			info := BucketFileInfo{
+				Index: plainIndex,
+				Shards: []ShardInfo{
+					{Index: 0, Hash: "hash1", URL: shardServer.URL},
+				},
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(info)
+		}))
+		defer infoServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(infoServer.URL),
+			Bucket:          TestBucket6,
+			Mnemonic:        TestMnemonic,
+		}
+
+		// Request unaligned range: 20-63 (20 % 16 = 4, not aligned)
+		// Should trigger recursive call with adjusted range 16-63
+		readCloser, err := DownloadFileStream(context.Background(), cfg, TestFileID, "bytes=20-63")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		defer readCloser.Close()
+
+		downloadedData, err := io.ReadAll(readCloser)
+		if err != nil {
+			t.Fatalf("failed to read stream: %v", err)
+		}
+
+		if callCount < 2 {
+			t.Logf("warning: expected recursive call, got %d calls", callCount)
+		}
+
+		// Length should be 44 bytes (20-63 inclusive = 44 bytes)
+		if len(downloadedData) != 44 {
+			t.Errorf("expected 44 bytes, got %d", len(downloadedData))
+		}
+	})
+
+	t.Run("successful stream with unaligned open-ended range", func(t *testing.T) {
+		testData := make([]byte, 128)
+		rand.Read(testData)
+		plainIndex := TestIndex
+		key, iv, err := GenerateFileKey(TestMnemonic, TestBucket6, plainIndex)
+		if err != nil {
+			t.Fatalf("failed to generate key: %v", err)
+		}
+
+		block, _ := aes.NewCipher(key)
+		encryptStream := cipher.NewCTR(block, iv)
+		encryptedData := make([]byte, len(testData))
+		encryptStream.XORKeyStream(encryptedData, testData)
+
+		shardServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			rangeHeader := r.Header.Get("Range")
+			if rangeHeader == "" {
+				w.WriteHeader(http.StatusOK)
+				w.Write(encryptedData)
+				return
+			}
+
+			// Handle adjusted aligned range request for open-ended
+			if strings.Contains(rangeHeader, "bytes=48-") {
+				w.Header().Set("Content-Range", "bytes 48-127/128")
+				w.WriteHeader(http.StatusPartialContent)
+				w.Write(encryptedData[48:])
+				return
+			}
+
+			w.WriteHeader(http.StatusBadRequest)
+		}))
+		defer shardServer.Close()
+
+		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			info := BucketFileInfo{
+				Index: plainIndex,
+				Shards: []ShardInfo{
+					{Index: 0, Hash: "hash1", URL: shardServer.URL},
+				},
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(info)
+		}))
+		defer infoServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(infoServer.URL),
+			Bucket:          TestBucket6,
+			Mnemonic:        TestMnemonic,
+		}
+
+		// Request unaligned open-ended range: bytes=50- (50 % 16 = 2, not aligned)
+		// Should trigger recursive call with adjusted range 48-
+		readCloser, err := DownloadFileStream(context.Background(), cfg, TestFileID, "bytes=50-")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		defer readCloser.Close()
+
+		downloadedData, err := io.ReadAll(readCloser)
+		if err != nil {
+			t.Fatalf("failed to read stream: %v", err)
+		}
+
+		// Should be 78 bytes (50 to 127 inclusive)
+		expectedLen := 128 - 50
+		if len(downloadedData) != expectedLen {
+			t.Errorf("expected %d bytes, got %d", expectedLen, len(downloadedData))
+		}
+	})
+
+	t.Run("error - recursive download fails during offset discard", func(t *testing.T) {
+		testData := make([]byte, 128)
+		rand.Read(testData)
+		plainIndex := TestIndex
+		key, iv, err := GenerateFileKey(TestMnemonic, TestBucket6, plainIndex)
+		if err != nil {
+			t.Fatalf("failed to generate key: %v", err)
+		}
+
+		block, _ := aes.NewCipher(key)
+		encryptStream := cipher.NewCTR(block, iv)
+		encryptedData := make([]byte, len(testData))
+		encryptStream.XORKeyStream(encryptedData, testData)
+
+		callCount := 0
+		shardServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			callCount++
+			rangeHeader := r.Header.Get("Range")
+
+			// First call (adjusted aligned request) - return less data than expected
+			// This will cause io.CopyN to fail during offset discard
+			if strings.Contains(rangeHeader, "bytes=16-") && callCount == 1 {
+				w.Header().Set("Content-Range", "bytes 16-20/128")
+				w.WriteHeader(http.StatusPartialContent)
+				// Return only 2 bytes when trying to discard 5 bytes (21-16=5)
+				w.Write(encryptedData[16:18])
+				return
+			}
+
+			w.WriteHeader(http.StatusBadRequest)
+		}))
+		defer shardServer.Close()
+
+		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			info := BucketFileInfo{
+				Index: plainIndex,
+				Shards: []ShardInfo{
+					{Index: 0, Hash: "hash1", URL: shardServer.URL},
+				},
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(info)
+		}))
+		defer infoServer.Close()
+
+		cfg := &config.Config{
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(infoServer.URL),
+			Bucket:          TestBucket6,
+			Mnemonic:        TestMnemonic,
+		}
+
+		// Request unaligned range that will trigger recursive call and fail during discard
+		_, err = DownloadFileStream(context.Background(), cfg, TestFileID, "bytes=21-")
+		if err == nil {
+			t.Fatal("expected error during offset discard, got nil")
+		}
+		if !strings.Contains(err.Error(), "failed to discard offset bytes") {
+			t.Errorf("expected error to contain 'failed to discard offset bytes', got %v", err)
+		}
+	})
 }
