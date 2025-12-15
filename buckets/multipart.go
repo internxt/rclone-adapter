@@ -15,6 +15,14 @@ import (
 	"github.com/internxt/rclone-adapter/config"
 )
 
+// chunkBufferPool reuses memory buffers for chunk encryption to reduce GC pressure
+var chunkBufferPool = sync.Pool{
+	New: func() any {
+		buf := make([]byte, config.DefaultChunkSize)
+		return &buf
+	},
+}
+
 // multipartUploadState holds the state for a single multipart upload session
 type multipartUploadState struct {
 	cfg            *config.Config
@@ -34,9 +42,10 @@ type multipartUploadState struct {
 
 // encryptedChunk represents a chunk that has been encrypted and is ready for upload
 type encryptedChunk struct {
-	index int
-	data  []byte
-	err   error
+	index      int
+	data       []byte
+	err        error
+	bufferRefs []*[]byte
 }
 
 // uploadResult holds the result of a single chunk upload
@@ -150,24 +159,30 @@ func (s *multipartUploadState) encryptAndUploadPipelined(ctx context.Context, re
 				chunkSize = s.totalSize - (i * s.chunkSize)
 			}
 
-			plainChunk := make([]byte, chunkSize)
+			plainBufPtr := chunkBufferPool.Get().(*[]byte)
+			encryptedBufPtr := chunkBufferPool.Get().(*[]byte)
+
+			plainChunk := (*plainBufPtr)[:chunkSize]
 			n, err := io.ReadFull(reader, plainChunk)
 			if err != nil && err != io.ErrUnexpectedEOF {
+				chunkBufferPool.Put(plainBufPtr)
+				chunkBufferPool.Put(encryptedBufPtr)
 				encryptErr = fmt.Errorf("failed to read chunk %d: %w", i, err)
 				chunkChan <- encryptedChunk{index: int(i), err: encryptErr}
 				return
 			}
 			plainChunk = plainChunk[:n]
 
-			encryptedData := make([]byte, len(plainChunk))
+			encryptedData := (*encryptedBufPtr)[:len(plainChunk)]
 			s.cipher.XORKeyStream(encryptedData, plainChunk)
 
 			overallHasher.Write(encryptedData)
 
 			chunkChan <- encryptedChunk{
-				index: int(i),
-				data:  encryptedData,
-				err:   nil,
+				index:      int(i),
+				data:       encryptedData,
+				err:        nil,
+				bufferRefs: []*[]byte{plainBufPtr, encryptedBufPtr},
 			}
 		}
 	}()
@@ -175,7 +190,10 @@ func (s *multipartUploadState) encryptAndUploadPipelined(ctx context.Context, re
 	// Start upload workers
 	for chunk := range chunkChan {
 		if chunk.err != nil {
-			for range chunkChan {
+			for remaining := range chunkChan {
+				for _, bufPtr := range remaining.bufferRefs {
+					chunkBufferPool.Put(bufPtr)
+				}
 			}
 			return nil, "", chunk.err
 		}
@@ -183,6 +201,12 @@ func (s *multipartUploadState) encryptAndUploadPipelined(ctx context.Context, re
 		uploadWg.Add(1)
 		go func(ch encryptedChunk) {
 			defer uploadWg.Done()
+
+			defer func() {
+				for _, bufPtr := range ch.bufferRefs {
+					chunkBufferPool.Put(bufPtr)
+				}
+			}()
 
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
