@@ -17,16 +17,11 @@ import (
 	"github.com/internxt/rclone-adapter/config"
 )
 
-const (
-	testMnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
-	testBucketID = "0123456789ab"
-)
-
 // TestNewMultipartUploadState tests the initialization of multipart upload state
 func TestNewMultipartUploadState(t *testing.T) {
 	cfg := &config.Config{
-		Mnemonic: testMnemonic,
-		Bucket:   testBucketID,
+		Mnemonic: TestMnemonic,
+		Bucket:   TestBucket6,
 	}
 
 	testCases := []struct {
@@ -106,8 +101,8 @@ func TestNewMultipartUploadState(t *testing.T) {
 // TestEncryptedChunkPipeline tests the encryption pipeline
 func TestEncryptedChunkPipeline(t *testing.T) {
 	cfg := &config.Config{
-		Mnemonic:   testMnemonic,
-		Bucket:     testBucketID,
+		Mnemonic:   TestMnemonic,
+		Bucket:     TestBucket6,
 		HTTPClient: &http.Client{},
 	}
 
@@ -279,8 +274,8 @@ func TestRetryableErrorDetection(t *testing.T) {
 // TestChunkRetryLogic tests that failed uploads are retried
 func TestChunkRetryLogic(t *testing.T) {
 	cfg := &config.Config{
-		Mnemonic:   testMnemonic,
-		Bucket:     testBucketID,
+		Mnemonic:   TestMnemonic,
+		Bucket:     TestBucket6,
 		HTTPClient: &http.Client{},
 	}
 
@@ -330,8 +325,8 @@ func TestChunkRetryLogic(t *testing.T) {
 // TestChunkRetryExhaustion tests that non-retryable errors fail immediately
 func TestChunkRetryExhaustion(t *testing.T) {
 	cfg := &config.Config{
-		Mnemonic:   testMnemonic,
-		Bucket:     testBucketID,
+		Mnemonic:   TestMnemonic,
+		Bucket:     TestBucket6,
 		HTTPClient: &http.Client{},
 	}
 
