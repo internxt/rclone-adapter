@@ -49,7 +49,6 @@ func StartUpload(ctx context.Context, cfg *config.Config, bucketID string, parts
 	}
 	req.Header.Set("Authorization", cfg.BasicAuthHeader)
 	req.Header.Set("internxt-version", "1.0")
-	req.Header.Set("internxt-client", "drive-web")
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 
 	// DEBUG: Print headers (without exposing full auth token)
@@ -97,7 +96,6 @@ func StartUploadMultipart(ctx context.Context, cfg *config.Config, bucketID stri
 	}
 	req.Header.Set("Authorization", cfg.BasicAuthHeader)
 	req.Header.Set("internxt-version", "1.0")
-	req.Header.Set("internxt-client", "rclone") // TODO: define this ?
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 
 	resp, err := cfg.HTTPClient.Do(req)

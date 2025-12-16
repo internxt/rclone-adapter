@@ -25,6 +25,7 @@ func TestNewMultipartUploadState(t *testing.T) {
 		Mnemonic: TestMnemonic,
 		Bucket:   TestBucket6,
 	}
+	cfg.ApplyDefaults()
 
 	testCases := []struct {
 		name      string
@@ -105,8 +106,8 @@ func TestEncryptedChunkPipeline(t *testing.T) {
 	cfg := &config.Config{
 		Mnemonic:   TestMnemonic,
 		Bucket:     TestBucket6,
-		HTTPClient: &http.Client{},
 	}
+	cfg.ApplyDefaults()
 
 	testData := bytes.Repeat([]byte("test data pattern "), 5*1024*1024) // ~90 MB
 	fileSize := int64(len(testData))
@@ -278,8 +279,8 @@ func TestChunkRetryLogic(t *testing.T) {
 	cfg := &config.Config{
 		Mnemonic:   TestMnemonic,
 		Bucket:     TestBucket6,
-		HTTPClient: &http.Client{},
 	}
+	cfg.ApplyDefaults()
 
 	state, err := newMultipartUploadState(cfg, 100*1024*1024)
 	if err != nil {
@@ -329,8 +330,8 @@ func TestChunkRetryExhaustion(t *testing.T) {
 	cfg := &config.Config{
 		Mnemonic:   TestMnemonic,
 		Bucket:     TestBucket6,
-		HTTPClient: &http.Client{},
 	}
+	cfg.ApplyDefaults()
 
 	state, err := newMultipartUploadState(cfg, 100*1024*1024)
 	if err != nil {

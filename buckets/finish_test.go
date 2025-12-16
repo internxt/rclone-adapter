@@ -467,9 +467,9 @@ func TestFinishMultipartUpload(t *testing.T) {
 			// Create config with mock endpoint
 			cfg := &config.Config{
 				BasicAuthHeader: TestBasicAuth,
-				HTTPClient:      &http.Client{},
 				Endpoints:       endpoints.NewConfig(mockServer.URL),
 			}
+			cfg.ApplyDefaults()
 
 			// Call FinishMultipartUpload
 			result, err := FinishMultipartUpload(context.Background(), cfg, TestBucket1, "test-index", tc.shard)

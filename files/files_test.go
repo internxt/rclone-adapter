@@ -74,10 +74,10 @@ func TestDeleteFile(t *testing.T) {
 			defer mockServer.Close()
 
 			cfg := &config.Config{
-				Token:      "test-token",
-				HTTPClient: &http.Client{},
-				Endpoints:  endpoints.NewConfig(mockServer.URL),
+				Token:     "test-token",
+				Endpoints: endpoints.NewConfig(mockServer.URL),
 			}
+			cfg.ApplyDefaults()
 
 			err := DeleteFile(context.Background(), cfg, tc.uuid)
 
@@ -186,10 +186,10 @@ func TestRenameFile(t *testing.T) {
 			defer mockServer.Close()
 
 			cfg := &config.Config{
-				Token:      "test-token",
-				HTTPClient: &http.Client{},
-				Endpoints:  endpoints.NewConfig(mockServer.URL),
+				Token:     "test-token",
+				Endpoints: endpoints.NewConfig(mockServer.URL),
 			}
+			cfg.ApplyDefaults()
 
 			err := RenameFile(context.Background(), cfg, tc.fileUUID, tc.newPlainName, tc.newType)
 

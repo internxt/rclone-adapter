@@ -30,7 +30,7 @@ func TestNewDefaultToken(t *testing.T) {
 func TestApplyDefaults(t *testing.T) {
 	t.Run("all defaults applied", func(t *testing.T) {
 		cfg := &Config{}
-		cfg.applyDefaults()
+		cfg.ApplyDefaults()
 
 		if cfg.DriveAPIURL != DefaultDriveAPIURL {
 			t.Errorf("expected DriveAPIURL %s, got %s", DefaultDriveAPIURL, cfg.DriveAPIURL)
@@ -75,7 +75,7 @@ func TestApplyDefaults(t *testing.T) {
 			HTTPClient:      customClient,
 			Endpoints:       customEndpoints,
 		}
-		cfg.applyDefaults()
+		cfg.ApplyDefaults()
 
 		if cfg.DriveAPIURL != customDriveURL {
 			t.Errorf("expected DriveAPIURL to be preserved as %s, got %s", customDriveURL, cfg.DriveAPIURL)
@@ -117,9 +117,15 @@ func TestNewHTTPClient(t *testing.T) {
 		t.Fatal("expected Transport to be set, got nil")
 	}
 
-	transport, ok := client.Transport.(*http.Transport)
+	// Transport is wrapped in clientHeaderTransport, so unwrap it
+	headerTransport, ok := client.Transport.(*clientHeaderTransport)
 	if !ok {
-		t.Fatalf("expected Transport to be *http.Transport, got %T", client.Transport)
+		t.Fatalf("expected Transport to be *clientHeaderTransport, got %T", client.Transport)
+	}
+
+	transport, ok := headerTransport.base.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected base transport to be *http.Transport, got %T", headerTransport.base)
 	}
 
 	if transport.MaxIdleConns != 100 {

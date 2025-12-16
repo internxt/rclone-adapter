@@ -195,13 +195,13 @@ func TestUploadFile(t *testing.T) {
 				Bucket:          TestBucket1,
 				Token:           TestToken,
 				BasicAuthHeader: TestBasicAuth,
-				HTTPClient:      &http.Client{},
-				Endpoints:       endpoints.NewConfig(mockServer.URL()),
+					Endpoints:       endpoints.NewConfig(mockServer.URL()),
 			}
 
 			if tc.setupConfig != nil {
 				tc.setupConfig(cfg)
 			}
+			cfg.ApplyDefaults()
 
 			result, err := UploadFile(context.Background(), cfg, tc.filePath, "folder-uuid-123", time.Now())
 
@@ -310,9 +310,9 @@ func TestUploadFileStream(t *testing.T) {
 				Bucket:          TestBucket2,
 				Token:           TestToken,
 				BasicAuthHeader: TestBasicAuth,
-				HTTPClient:      &http.Client{},
-				Endpoints:       endpoints.NewConfig(mockServer.URL()),
+					Endpoints:       endpoints.NewConfig(mockServer.URL()),
 			}
+			cfg.ApplyDefaults()
 
 			reader := bytes.NewReader(tc.content)
 			result, err := UploadFileStream(context.Background(), cfg, TestFolderUUID, tc.fileName, reader, int64(len(tc.content)), time.Now())
@@ -456,9 +456,9 @@ func TestUploadFileStreamMultipart(t *testing.T) {
 				Bucket:          TestBucket3,
 				Token:           TestToken,
 				BasicAuthHeader: TestBasicAuth,
-				HTTPClient:      &http.Client{},
-				Endpoints:       endpoints.NewConfig(mockServer.URL()),
+					Endpoints:       endpoints.NewConfig(mockServer.URL()),
 			}
+			cfg.ApplyDefaults()
 
 			reader := bytes.NewReader(tc.content)
 			result, err := UploadFileStreamMultipart(context.Background(), cfg, TestFolderUUID, tc.fileName, reader, int64(len(tc.content)), time.Now())
@@ -560,9 +560,9 @@ func TestUploadFileStreamAuto(t *testing.T) {
 				Bucket:          TestBucket4,
 				Token:           TestToken,
 				BasicAuthHeader: TestBasicAuth,
-				HTTPClient:      &http.Client{},
-				Endpoints:       endpoints.NewConfig(mockServer.URL()),
+					Endpoints:       endpoints.NewConfig(mockServer.URL()),
 			}
+			cfg.ApplyDefaults()
 
 			content := make([]byte, tc.fileSize)
 			reader := bytes.NewReader(content)
@@ -592,9 +592,9 @@ func TestUploadFileInvalidMnemonic(t *testing.T) {
 		Bucket:          TestBucket5,
 		Token:           TestToken,
 		BasicAuthHeader: TestBasicAuth,
-		HTTPClient:      &http.Client{Timeout: 1},
 		Endpoints:       endpoints.NewConfig("http://localhost"),
 	}
+	cfg.ApplyDefaults()
 
 	_, err := UploadFile(context.Background(), cfg, testFilePath, TestFolderUUID, time.Now())
 	if err == nil {
@@ -616,9 +616,9 @@ func TestUploadFileStreamContextCancellation(t *testing.T) {
 		Bucket:          TestBucket6,
 		Token:           TestToken,
 		BasicAuthHeader: TestBasicAuth,
-		HTTPClient:      &http.Client{},
 		Endpoints:       endpoints.NewConfig("http://localhost"),
 	}
+	cfg.ApplyDefaults()
 
 	content := []byte("test content")
 	reader := bytes.NewReader(content)
@@ -678,9 +678,9 @@ func TestUploadFileNameParsing(t *testing.T) {
 				Bucket:          TestBucket7,
 				Token:           TestToken,
 				BasicAuthHeader: TestBasicAuth,
-				HTTPClient:      &http.Client{},
-				Endpoints:       endpoints.NewConfig(mockServer.URL()),
+					Endpoints:       endpoints.NewConfig(mockServer.URL()),
 			}
+			cfg.ApplyDefaults()
 
 			_, err := UploadFile(context.Background(), cfg, testFilePath, TestFolderUUID, time.Now())
 			if err != nil {

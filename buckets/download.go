@@ -44,7 +44,6 @@ func GetBucketFileInfo(ctx context.Context, cfg *config.Config, bucketID, fileID
 	}
 	req.Header.Set("Authorization", cfg.BasicAuthHeader)
 	req.Header.Set("internxt-version", "1.0")
-	req.Header.Set("internxt-client", "internxt-go-sdk")
 
 	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {

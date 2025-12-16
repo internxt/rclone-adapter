@@ -58,7 +58,6 @@ func FinishUpload(ctx context.Context, cfg *config.Config, bucketID, index strin
 	}
 	req.Header.Set("Authorization", cfg.BasicAuthHeader)
 	req.Header.Set("internxt-version", "1.0")
-	req.Header.Set("internxt-client", "drive-web")
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 
 	resp, err := cfg.HTTPClient.Do(req)
@@ -102,7 +101,6 @@ func FinishMultipartUpload(ctx context.Context, cfg *config.Config, bucketID, in
 	}
 	req.Header.Set("Authorization", cfg.BasicAuthHeader)
 	req.Header.Set("internxt-version", "1.0")
-	req.Header.Set("internxt-client", "rclone") // TODO: define this ?
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 
 	resp, err := cfg.HTTPClient.Do(req)

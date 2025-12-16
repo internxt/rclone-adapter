@@ -125,9 +125,9 @@ func TestStartUploadMultipart(t *testing.T) {
 
 			cfg := &config.Config{
 				BasicAuthHeader: TestBasicAuth,
-				HTTPClient:      &http.Client{},
 				Endpoints:       endpoints.NewConfig(mockServer.URL),
 			}
+			cfg.ApplyDefaults()
 
 			specs := []UploadPartSpec{
 				{Index: 0, Size: tc.fileSize},

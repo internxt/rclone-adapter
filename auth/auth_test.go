@@ -91,10 +91,10 @@ func TestRefreshToken(t *testing.T) {
 			defer mockServer.Close()
 
 			cfg := &config.Config{
-				Token:      tc.token,
-				HTTPClient: &http.Client{},
-				Endpoints:  endpoints.NewConfig(mockServer.URL),
+				Token:     tc.token,
+				Endpoints: endpoints.NewConfig(mockServer.URL),
 			}
+			cfg.ApplyDefaults()
 
 			result, err := RefreshToken(context.Background(), cfg)
 
@@ -129,10 +129,10 @@ func TestRefreshTokenInvalidJSON(t *testing.T) {
 	defer mockServer.Close()
 
 	cfg := &config.Config{
-		Token:      "test-token",
-		HTTPClient: &http.Client{},
-		Endpoints:  endpoints.NewConfig(mockServer.URL),
+		Token:     "test-token",
+		Endpoints: endpoints.NewConfig(mockServer.URL),
 	}
+	cfg.ApplyDefaults()
 
 	_, err := RefreshToken(context.Background(), cfg)
 
@@ -165,10 +165,10 @@ func TestRefreshTokenRequestFormat(t *testing.T) {
 	defer mockServer.Close()
 
 	cfg := &config.Config{
-		Token:      "my-test-token",
-		HTTPClient: &http.Client{},
-		Endpoints:  endpoints.NewConfig(mockServer.URL),
+		Token:     "my-test-token",
+		Endpoints: endpoints.NewConfig(mockServer.URL),
 	}
+	cfg.ApplyDefaults()
 
 	_, err := RefreshToken(context.Background(), cfg)
 	if err != nil {

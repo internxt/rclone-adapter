@@ -58,10 +58,10 @@ func TestCreateFolder(t *testing.T) {
 		defer mockServer.Close()
 
 		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
+			Token:     "test-token",
+			Endpoints: endpoints.NewConfig(mockServer.URL),
 		}
+		cfg.ApplyDefaults()
 
 		reqBody := CreateFolderRequest{
 			PlainName:        "test-folder",
@@ -101,10 +101,10 @@ func TestCreateFolder(t *testing.T) {
 		defer mockServer.Close()
 
 		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
+			Token:     "test-token",
+			Endpoints: endpoints.NewConfig(mockServer.URL),
 		}
+		cfg.ApplyDefaults()
 
 		reqBody := CreateFolderRequest{
 			PlainName:        "test-folder",
@@ -128,10 +128,10 @@ func TestCreateFolder(t *testing.T) {
 		defer mockServer.Close()
 
 		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
+			Token:     "test-token",
+			Endpoints: endpoints.NewConfig(mockServer.URL),
 		}
+		cfg.ApplyDefaults()
 
 		reqBody := CreateFolderRequest{
 			PlainName:        "test-folder",
@@ -152,10 +152,10 @@ func TestCreateFolder(t *testing.T) {
 		defer mockServer.Close()
 
 		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
+			Token:     "test-token",
+			Endpoints: endpoints.NewConfig(mockServer.URL),
 		}
+		cfg.ApplyDefaults()
 
 		reqBody := CreateFolderRequest{
 			PlainName:        "test-folder",
@@ -179,10 +179,10 @@ func TestCreateFolder(t *testing.T) {
 		defer mockServer.Close()
 
 		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
+			Token:     "test-token",
+			Endpoints: endpoints.NewConfig(mockServer.URL),
 		}
+		cfg.ApplyDefaults()
 
 		reqBody := CreateFolderRequest{
 			PlainName:        "test-folder",
@@ -220,10 +220,10 @@ func TestDeleteFolder(t *testing.T) {
 		defer mockServer.Close()
 
 		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
+			Token:     "test-token",
+			Endpoints: endpoints.NewConfig(mockServer.URL),
 		}
+		cfg.ApplyDefaults()
 
 		err := DeleteFolder(context.Background(), cfg, "test-uuid")
 		if err != nil {
@@ -239,10 +239,10 @@ func TestDeleteFolder(t *testing.T) {
 		defer mockServer.Close()
 
 		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
+			Token:     "test-token",
+			Endpoints: endpoints.NewConfig(mockServer.URL),
 		}
+		cfg.ApplyDefaults()
 
 		err := DeleteFolder(context.Background(), cfg, "non-existent-uuid")
 		if err == nil {
@@ -261,10 +261,10 @@ func TestDeleteFolder(t *testing.T) {
 		defer mockServer.Close()
 
 		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
+			Token:     "test-token",
+			Endpoints: endpoints.NewConfig(mockServer.URL),
 		}
+		cfg.ApplyDefaults()
 
 		err := DeleteFolder(context.Background(), cfg, "test-uuid")
 		if err == nil {
@@ -311,10 +311,10 @@ func TestListFolders(t *testing.T) {
 		defer mockServer.Close()
 
 		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
+			Token:     "test-token",
+			Endpoints: endpoints.NewConfig(mockServer.URL),
 		}
+		cfg.ApplyDefaults()
 
 		folders, err := ListFolders(context.Background(), cfg, "parent-uuid", ListOptions{})
 		if err != nil {
@@ -353,10 +353,10 @@ func TestListFolders(t *testing.T) {
 		defer mockServer.Close()
 
 		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
+			Token:     "test-token",
+			Endpoints: endpoints.NewConfig(mockServer.URL),
 		}
+		cfg.ApplyDefaults()
 
 		opts := ListOptions{
 			Offset: 10,
@@ -390,10 +390,10 @@ func TestListFolders(t *testing.T) {
 		defer mockServer.Close()
 
 		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
+			Token:     "test-token",
+			Endpoints: endpoints.NewConfig(mockServer.URL),
 		}
+		cfg.ApplyDefaults()
 
 		opts := ListOptions{
 			Limit:  -5,  // Should default to 50
@@ -414,10 +414,10 @@ func TestListFolders(t *testing.T) {
 		defer mockServer.Close()
 
 		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
+			Token:     "test-token",
+			Endpoints: endpoints.NewConfig(mockServer.URL),
 		}
+		cfg.ApplyDefaults()
 
 		_, err := ListFolders(context.Background(), cfg, "parent-uuid", ListOptions{})
 		if err == nil {
@@ -436,10 +436,10 @@ func TestListFolders(t *testing.T) {
 		defer mockServer.Close()
 
 		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
+			Token:     "test-token",
+			Endpoints: endpoints.NewConfig(mockServer.URL),
 		}
+		cfg.ApplyDefaults()
 
 		_, err := ListFolders(context.Background(), cfg, "parent-uuid", ListOptions{})
 		if err == nil {
@@ -473,10 +473,10 @@ func TestListFiles(t *testing.T) {
 		defer mockServer.Close()
 
 		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
+			Token:     "test-token",
+			Endpoints: endpoints.NewConfig(mockServer.URL),
 		}
+		cfg.ApplyDefaults()
 
 		files, err := ListFiles(context.Background(), cfg, "parent-uuid", ListOptions{})
 		if err != nil {
@@ -499,10 +499,10 @@ func TestListFiles(t *testing.T) {
 		defer mockServer.Close()
 
 		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
+			Token:     "test-token",
+			Endpoints: endpoints.NewConfig(mockServer.URL),
 		}
+		cfg.ApplyDefaults()
 
 		_, err := ListFiles(context.Background(), cfg, "non-existent-uuid", ListOptions{})
 		if err == nil {
@@ -547,10 +547,10 @@ func TestListAllFiles(t *testing.T) {
 		defer mockServer.Close()
 
 		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
+			Token:     "test-token",
+			Endpoints: endpoints.NewConfig(mockServer.URL),
 		}
+		cfg.ApplyDefaults()
 
 		files, err := ListAllFiles(context.Background(), cfg, "parent-uuid")
 		if err != nil {
@@ -579,10 +579,10 @@ func TestListAllFiles(t *testing.T) {
 		defer mockServer.Close()
 
 		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
+			Token:     "test-token",
+			Endpoints: endpoints.NewConfig(mockServer.URL),
 		}
+		cfg.ApplyDefaults()
 
 		files, err := ListAllFiles(context.Background(), cfg, "parent-uuid")
 		if err != nil {
@@ -602,10 +602,10 @@ func TestListAllFiles(t *testing.T) {
 		defer mockServer.Close()
 
 		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
+			Token:     "test-token",
+			Endpoints: endpoints.NewConfig(mockServer.URL),
 		}
+		cfg.ApplyDefaults()
 
 		_, err := ListAllFiles(context.Background(), cfg, "parent-uuid")
 		if err == nil {
@@ -643,10 +643,10 @@ func TestListAllFolders(t *testing.T) {
 		defer mockServer.Close()
 
 		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
+			Token:     "test-token",
+			Endpoints: endpoints.NewConfig(mockServer.URL),
 		}
+		cfg.ApplyDefaults()
 
 		folders, err := ListAllFolders(context.Background(), cfg, "parent-uuid")
 		if err != nil {
@@ -667,10 +667,10 @@ func TestListAllFolders(t *testing.T) {
 		defer mockServer.Close()
 
 		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
+			Token:     "test-token",
+			Endpoints: endpoints.NewConfig(mockServer.URL),
 		}
+		cfg.ApplyDefaults()
 
 		_, err := ListAllFolders(context.Background(), cfg, "parent-uuid")
 		if err == nil {

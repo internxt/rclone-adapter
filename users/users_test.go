@@ -82,10 +82,10 @@ func TestGetUsage(t *testing.T) {
 			defer mockServer.Close()
 
 			cfg := &config.Config{
-				Token:      "test-token",
-				HTTPClient: &http.Client{},
-				Endpoints:  endpoints.NewConfig(mockServer.URL),
+				Token:     "test-token",
+				Endpoints: endpoints.NewConfig(mockServer.URL),
 			}
+			cfg.ApplyDefaults()
 
 			usage, err := GetUsage(context.Background(), cfg)
 
@@ -119,10 +119,10 @@ func TestGetUsageInvalidJSON(t *testing.T) {
 	defer mockServer.Close()
 
 	cfg := &config.Config{
-		Token:      "test-token",
-		HTTPClient: &http.Client{},
-		Endpoints:  endpoints.NewConfig(mockServer.URL),
+		Token:     "test-token",
+		Endpoints: endpoints.NewConfig(mockServer.URL),
 	}
+	cfg.ApplyDefaults()
 
 	_, err := GetUsage(context.Background(), cfg)
 	if err == nil {
@@ -203,10 +203,10 @@ func TestGetLimit(t *testing.T) {
 			defer mockServer.Close()
 
 			cfg := &config.Config{
-				Token:      "test-token",
-				HTTPClient: &http.Client{},
-				Endpoints:  endpoints.NewConfig(mockServer.URL),
+				Token:     "test-token",
+				Endpoints: endpoints.NewConfig(mockServer.URL),
 			}
+			cfg.ApplyDefaults()
 
 			limit, err := GetLimit(context.Background(), cfg)
 
@@ -240,10 +240,10 @@ func TestGetLimitInvalidJSON(t *testing.T) {
 	defer mockServer.Close()
 
 	cfg := &config.Config{
-		Token:      "test-token",
-		HTTPClient: &http.Client{},
-		Endpoints:  endpoints.NewConfig(mockServer.URL),
+		Token:     "test-token",
+		Endpoints: endpoints.NewConfig(mockServer.URL),
 	}
+	cfg.ApplyDefaults()
 
 	_, err := GetLimit(context.Background(), cfg)
 	if err == nil {
@@ -257,10 +257,10 @@ func TestGetLimitInvalidJSON(t *testing.T) {
 func TestGetUsageHTTPClientError(t *testing.T) {
 	// Use an invalid URL that will cause the HTTP client to fail
 	cfg := &config.Config{
-		Token:      "test-token",
-		HTTPClient: &http.Client{},
-		Endpoints:  endpoints.NewConfig("http://invalid-host-that-does-not-exist-12345.local"),
+		Token:     "test-token",
+		Endpoints: endpoints.NewConfig("http://invalid-host-that-does-not-exist-12345.local"),
 	}
+	cfg.ApplyDefaults()
 
 	_, err := GetUsage(context.Background(), cfg)
 	if err == nil {
@@ -274,10 +274,10 @@ func TestGetUsageHTTPClientError(t *testing.T) {
 func TestGetLimitHTTPClientError(t *testing.T) {
 	// Use an invalid URL that will cause the HTTP client to fail
 	cfg := &config.Config{
-		Token:      "test-token",
-		HTTPClient: &http.Client{},
-		Endpoints:  endpoints.NewConfig("http://invalid-host-that-does-not-exist-12345.local"),
+		Token:     "test-token",
+		Endpoints: endpoints.NewConfig("http://invalid-host-that-does-not-exist-12345.local"),
 	}
+	cfg.ApplyDefaults()
 
 	_, err := GetLimit(context.Background(), cfg)
 	if err == nil {
