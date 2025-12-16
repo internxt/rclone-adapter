@@ -335,8 +335,8 @@ func TestStartUpload(t *testing.T) {
 				if r.Header.Get("internxt-version") != "1.0" {
 					t.Errorf("expected internxt-version 1.0, got %s", r.Header.Get("internxt-version"))
 				}
-				if r.Header.Get("internxt-client") != "drive-web" {
-					t.Errorf("expected internxt-client drive-web, got %s", r.Header.Get("internxt-client"))
+				if r.Header.Get("internxt-client") != "rclone" {
+					t.Errorf("expected internxt-client rclone, got %s", r.Header.Get("internxt-client"))
 				}
 				if r.Header.Get("Content-Type") != "application/json; charset=utf-8" {
 					t.Errorf("expected Content-Type application/json; charset=utf-8, got %s", r.Header.Get("Content-Type"))
