@@ -22,21 +22,22 @@ const (
 )
 
 type Config struct {
-	Token             string            `json:"token,omitempty"`
-	RootFolderID      string            `json:"root_folder_id,omitempty"`
-	Bucket            string            `json:"bucket,omitempty"`
-	Mnemonic          string            `json:"mnemonic,omitempty"`
-	BasicAuthHeader   string            `json:"basic_auth_header,omitempty"`
-	DriveAPIURL       string            `json:"drive_api_url,omitempty"` // Deprecated: Use Endpoints instead
-	AuthAPIURL        string            `json:"auth_api_url,omitempty"`  // Deprecated: Use Endpoints instead
-	UsersAPIURL       string            `json:"users_api_url,omitempty"` // Deprecated: Use Endpoints instead
-	AppCryptoSecret   string            `json:"app_crypto_secret,omitempty"`
-	AppCryptoSecret2  string            `json:"app_crypto_secret2,omitempty"`
-	AppMagicIV        string            `json:"app_magic_iv,omitempty"`
-	AppMagicSalt      string            `json:"app_magic_salt,omitempty"`
-	EncryptedPassword string            `json:"encrypted_password,omitempty"`
-	HTTPClient        *http.Client      `json:"-"` // Centralized HTTP client with proper timeouts
-	Endpoints         *endpoints.Config `json:"-"` // Centralized API endpoint management
+	Token              string            `json:"token,omitempty"`
+	RootFolderID       string            `json:"root_folder_id,omitempty"`
+	Bucket             string            `json:"bucket,omitempty"`
+	Mnemonic           string            `json:"mnemonic,omitempty"`
+	BasicAuthHeader    string            `json:"basic_auth_header,omitempty"`
+	DriveAPIURL        string            `json:"drive_api_url,omitempty"` // Deprecated: Use Endpoints instead
+	AuthAPIURL         string            `json:"auth_api_url,omitempty"`  // Deprecated: Use Endpoints instead
+	UsersAPIURL        string            `json:"users_api_url,omitempty"` // Deprecated: Use Endpoints instead
+	AppCryptoSecret    string            `json:"app_crypto_secret,omitempty"`
+	AppCryptoSecret2   string            `json:"app_crypto_secret2,omitempty"`
+	AppMagicIV         string            `json:"app_magic_iv,omitempty"`
+	AppMagicSalt       string            `json:"app_magic_salt,omitempty"`
+	EncryptedPassword  string            `json:"encrypted_password,omitempty"`
+	HTTPClient         *http.Client      `json:"-"` // Centralized HTTP client with proper timeouts
+	Endpoints          *endpoints.Config `json:"-"` // Centralized API endpoint management
+	SkipHashValidation bool              `json:"skip_hash_validation,omitempty"`
 }
 
 func NewDefaultToken(token string) *Config {

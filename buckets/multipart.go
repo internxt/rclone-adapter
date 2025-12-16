@@ -5,7 +5,7 @@ import (
 	"context"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -127,7 +127,8 @@ func (s *multipartUploadState) encryptAndUploadPipelined(ctx context.Context, re
 
 	semaphore := make(chan struct{}, s.maxConcurrency)
 
-	overallHasher := sha1.New()
+	// Compute hash: RIPEMD-160(SHA-256(encrypted_data)) - matches web client
+	overallHasher := sha256.New()
 	var hashMutex sync.Mutex
 	var encryptErr error
 
@@ -223,7 +224,9 @@ func (s *multipartUploadState) encryptAndUploadPipelined(ctx context.Context, re
 	}
 
 	hashMutex.Lock()
-	overallHash := hex.EncodeToString(overallHasher.Sum(nil))
+	// Compute RIPEMD-160(SHA-256) to match web client
+	sha256Result := overallHasher.Sum(nil)
+	overallHash := ComputeFileHash(sha256Result)
 	hashMutex.Unlock()
 
 	return parts, overallHash, nil

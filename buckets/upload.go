@@ -3,7 +3,6 @@ package buckets
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -41,10 +40,9 @@ func UploadFile(ctx context.Context, cfg *config.Config, filePath, targetFolderU
 	if err != nil {
 		return nil, fmt.Errorf("failed to create encrypt reader: %w", err)
 	}
+	// Compute hash: RIPEMD-160(SHA-256(encrypted_data)) - matches web client
 	sha256Hasher := sha256.New()
-	sha1Hasher := sha1.New()
 	r := io.TeeReader(encReader, sha256Hasher)
-	r = io.TeeReader(r, sha1Hasher)
 	specs := []UploadPartSpec{{Index: 0, Size: plainSize}}
 	startResp, err := StartUpload(ctx, cfg, cfg.Bucket, specs)
 	if err != nil {
@@ -59,7 +57,9 @@ func UploadFile(ctx context.Context, cfg *config.Config, filePath, targetFolderU
 		return nil, fmt.Errorf("failed to transfer file data: %w", err)
 	}
 	encIndex := hex.EncodeToString(ph[:])
-	partHash := hex.EncodeToString(sha1Hasher.Sum(nil))
+	// Compute RIPEMD-160(SHA-256) to match web client
+	sha256Result := sha256Hasher.Sum(nil)
+	partHash := ComputeFileHash(sha256Result)
 
 	finishResp, err := FinishUpload(ctx, cfg, cfg.Bucket, encIndex, []Shard{{Hash: partHash, UUID: part.UUID}})
 	if err != nil {
@@ -95,10 +95,9 @@ func UploadFileStream(ctx context.Context, cfg *config.Config, targetFolderUUID,
 		return nil, fmt.Errorf("failed to create encrypt reader: %w", err)
 	}
 
+	// Compute hash: RIPEMD-160(SHA-256(encrypted_data)) - matches web client
 	sha256Hasher := sha256.New()
-	sha1Hasher := sha1.New()
 	r := io.TeeReader(encReader, sha256Hasher)
-	r = io.TeeReader(r, sha1Hasher)
 
 	specs := []UploadPartSpec{{Index: 0, Size: plainSize}}
 	startResp, err := StartUpload(ctx, cfg, cfg.Bucket, specs)
@@ -121,7 +120,9 @@ func UploadFileStream(ctx context.Context, cfg *config.Config, targetFolderUUID,
 	}
 
 	encIndex := hex.EncodeToString(ph[:])
-	partHash := hex.EncodeToString(sha1Hasher.Sum(nil))
+	// Compute RIPEMD-160(SHA-256) to match web client
+	sha256Result := sha256Hasher.Sum(nil)
+	partHash := ComputeFileHash(sha256Result)
 	finishResp, err := FinishUpload(ctx, cfg, cfg.Bucket, encIndex, []Shard{{Hash: partHash, UUID: part.UUID}})
 	if err != nil {
 		return nil, fmt.Errorf("failed to finish upload: %w", err)

@@ -2,6 +2,7 @@ package buckets
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -95,13 +96,22 @@ func DownloadFile(ctx context.Context, cfg *config.Config, fileID, destPath stri
 		return fmt.Errorf("shard download failed: %d %s", resp.StatusCode, string(body))
 	}
 
-	// 4) wrap in AES‑CTR decryptor
-	decReader, err := DecryptReader(resp.Body, key, iv)
+	// 4) Set up hash computation for encrypted data stream
+	// Hash algorithm: RIPEMD-160(SHA-256(encrypted_data))
+	var readStream io.Reader = resp.Body
+	var sha256Hasher io.Writer
+	if !cfg.SkipHashValidation {
+		sha256Hasher = sha256.New()
+		readStream = io.TeeReader(resp.Body, sha256Hasher)
+	}
+
+	// 5) wrap in AES‑CTR decryptor
+	decReader, err := DecryptReader(readStream, key, iv)
 	if err != nil {
 		return fmt.Errorf("failed to create decrypt reader: %w", err)
 	}
 
-	// 5) write plaintext to file
+	// 6) write plaintext to file
 	out, err := os.Create(destPath)
 	if err != nil {
 		return fmt.Errorf("failed to create destination file %s: %w", destPath, err)
@@ -111,6 +121,22 @@ func DownloadFile(ctx context.Context, cfg *config.Config, fileID, destPath stri
 	if _, err := io.Copy(out, decReader); err != nil {
 		return fmt.Errorf("failed to write decrypted data to file: %w", err)
 	}
+
+	// 7) Validate hash after download completes
+	if !cfg.SkipHashValidation {
+		// Compute RIPEMD-160(SHA-256(encrypted_data)) to match web client
+		sha256Result := sha256Hasher.(interface{ Sum([]byte) []byte }).Sum(nil)
+		computedHash := ComputeFileHash(sha256Result)
+
+		if computedHash != shard.Hash {
+			// Clean up corrupted file
+			out.Close()
+			os.Remove(destPath)
+			return fmt.Errorf("hash mismatch for file %s: expected %s, got %s (file removed)",
+				fileID, shard.Hash, computedHash)
+		}
+	}
+
 	return nil
 }
 
@@ -192,8 +218,33 @@ func DownloadFileStream(ctx context.Context, cfg *config.Config, fileUUID string
 		return nil, fmt.Errorf("shard download failed: %d %s", resp.StatusCode, string(body))
 	}
 
-	// 5) Wrap in AES‑CTR decryptor
-	decReader, err := DecryptReader(resp.Body, key, iv)
+	// 5) Set up hash computation for full downloads only (range requests skip validation)
+	// Hash algorithm: RIPEMD-160(SHA-256(encrypted_data)) - matches web client
+	var readStream io.Reader = resp.Body
+
+	if rangeValue == "" && !cfg.SkipHashValidation {
+		// Full download - validate hash on Close()
+		sha256Hasher := sha256.New()
+		readStream = io.TeeReader(resp.Body, sha256Hasher)
+
+		decReader, err := DecryptReader(readStream, key, iv)
+		if err != nil {
+			resp.Body.Close()
+			return nil, fmt.Errorf("failed to create decrypt reader: %w", err)
+		}
+
+		// Return validating reader that checks hash when closed
+		return &hashValidatingReader{
+			Reader:       decReader,
+			body:         resp.Body,
+			sha256Hasher: sha256Hasher,
+			expectedHash: shard.Hash,
+			fileUUID:     fileUUID,
+		}, nil
+	}
+
+	// Range request or validation skipped - no hash check
+	decReader, err := DecryptReader(readStream, key, iv)
 	if err != nil {
 		resp.Body.Close()
 		return nil, fmt.Errorf("failed to create decrypt reader: %w", err)
@@ -248,4 +299,51 @@ func adjustIV(iv []byte, blockIndex int) {
 			}
 		}
 	}
+}
+
+// hashValidatingReader wraps a reader and validates the hash on Close().
+// It computes RIPEMD-160(SHA-256(encrypted_data)) and compares it
+// to the expected hash when the stream is closed
+type hashValidatingReader struct {
+	io.Reader
+	body         io.Closer
+	sha256Hasher io.Writer
+	expectedHash string
+	fileUUID     string
+	validated    bool
+}
+
+// Close closes the underlying body and validates the computed hash.
+// NOTE: The hash is only valid if the ENTIRE stream was read before calling Close().
+// If only partial data was read, the hash will be incorrect.
+func (h *hashValidatingReader) Close() error {
+	if h.body == nil {
+		return nil
+	}
+
+	// Validate hash BEFORE closing body (in case we need to drain remaining data)
+	if !h.validated {
+		h.validated = true
+
+		// IMPORTANT: Drain any remaining data in the stream to ensure complete hash
+		// This happens if the caller didn't read the entire stream
+		remaining, err := io.Copy(io.Discard, h.Reader)
+		if err != nil {
+			h.body.Close()
+			return fmt.Errorf("failed to drain remaining stream data: %w", err)
+		}
+
+		// Compute RIPEMD-160(SHA-256(encrypted_data)) to match web client
+		sha256Result := h.sha256Hasher.(interface{ Sum([]byte) []byte }).Sum(nil)
+		computedHash := ComputeFileHash(sha256Result)
+
+		if computedHash != h.expectedHash {
+			h.body.Close()
+			return fmt.Errorf("hash mismatch for file %s: expected %s, got %s (remaining bytes: %d)",
+				h.fileUUID, h.expectedHash, computedHash, remaining)
+		}
+	}
+
+	// Close underlying body
+	return h.body.Close()
 }
