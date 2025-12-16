@@ -7,8 +7,7 @@ import (
 )
 
 const (
-	TEST_MNEMONIC = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
-	TEST_INDEX    = "0123456789abcdef00000123456789abcdef00000123456789abcdef00000000"
+	TEST_INDEX = "0123456789abcdef00000123456789abcdef00000123456789abcdef00000000"
 )
 
 var (
@@ -21,7 +20,7 @@ var (
 
 func TestGenerateBucketKey(t *testing.T) {
 	want := "726a02ad035960f8b6563497557bb8efe15cdb160ffb40541102c92c89262a00"
-	got, _ := GenerateBucketKey(TEST_MNEMONIC, TEST_BUCKET_ID)
+	got, _ := GenerateBucketKey(TestMnemonic, TEST_BUCKET_ID)
 	if want != got {
 		t.Fatalf("Wanted %s, but got %s", want, got)
 	}
@@ -29,7 +28,7 @@ func TestGenerateBucketKey(t *testing.T) {
 
 func TestGetFileDeterministicKey(t *testing.T) {
 	want := "a4321694c796a075a91818192f0fe66ccc0ad8a9b75251e8034b6661a7ea97e5e347e5ce0be65a23a8e6eefa205e2d27651de21013589dfb7fde458588f84314"
-	got := hex.EncodeToString(GetFileDeterministicKey([]byte(TEST_MNEMONIC), []byte(TEST_MNEMONIC)))
+	got := hex.EncodeToString(GetFileDeterministicKey([]byte(TestMnemonic), []byte(TestMnemonic)))
 	if want != got {
 		t.Fatalf("Wanted %s, but got %s", want, got)
 	}
@@ -57,7 +56,7 @@ func TestGenerateFileKey(t *testing.T) {
 	wantKey := "d71b781ecf61d8553b0326031658c575c7bec5f92bdeb9ed08925317d2c22e59"
 	tempIV, _ := hex.DecodeString(TEST_INDEX)
 	wantIV := hex.EncodeToString(tempIV[0:16])
-	gotKey, gotIV, _ := GenerateFileKey(TEST_MNEMONIC, hex.EncodeToString(TEST_BUCKET_ID), TEST_INDEX)
+	gotKey, gotIV, _ := GenerateFileKey(TestMnemonic, hex.EncodeToString(TEST_BUCKET_ID), TEST_INDEX)
 	gotKeyString := hex.EncodeToString(gotKey)
 	gotIVString := hex.EncodeToString(gotIV)
 

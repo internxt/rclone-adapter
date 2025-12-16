@@ -22,9 +22,6 @@ const (
 )
 
 type Config struct {
-	Email              string            `json:"email,omitempty"`
-	Password           string            `json:"password,omitempty"`
-	TFA                string            `json:"tfa,omitempty"`
 	Token              string            `json:"token,omitempty"`
 	RootFolderID       string            `json:"root_folder_id,omitempty"`
 	Bucket             string            `json:"bucket,omitempty"`
@@ -41,25 +38,6 @@ type Config struct {
 	HTTPClient         *http.Client      `json:"-"` // Centralized HTTP client with proper timeouts
 	Endpoints          *endpoints.Config `json:"-"` // Centralized API endpoint management
 	SkipHashValidation bool              `json:"skip_hash_validation,omitempty"`
-}
-
-func NewDefault(email, password string) *Config {
-	cfg := &Config{
-		Email:    email,
-		Password: password,
-	}
-	cfg.applyDefaults()
-	return cfg
-}
-
-func NewDefault2FA(email, password, tfa string) *Config {
-	cfg := &Config{
-		Email:    email,
-		Password: password,
-		TFA:      tfa,
-	}
-	cfg.applyDefaults()
-	return cfg
 }
 
 func NewDefaultToken(token string) *Config {
