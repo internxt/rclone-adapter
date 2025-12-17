@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/internxt/rclone-adapter/config"
+	"github.com/internxt/rclone-adapter/endpoints"
 )
 
 // TestNewMultipartUploadState tests the initialization of multipart upload state
@@ -390,5 +392,172 @@ func TestContainsHelper(t *testing.T) {
 				t.Errorf("contains('%s', '%s') = %v, expected %v", tc.str, tc.substr, result, tc.expected)
 			}
 		})
+	}
+}
+
+// TestMultipartUploadContextCancellation tests context cancellation during upload
+func TestMultipartUploadContextCancellation(t *testing.T) {
+	cfg := &config.Config{
+		Mnemonic:   TestMnemonic,
+		Bucket:     TestBucket1,
+		HTTPClient: &http.Client{},
+	}
+
+	largeContent := make([]byte, config.DefaultChunkSize*2)
+	for i := range largeContent {
+		largeContent[i] = byte(i % 256)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	var serverURL string
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Cancel context during multipart start
+		cancel()
+
+		numParts := 3
+		urls := make([]string, numParts)
+		for i := range urls {
+			urls[i] = serverURL + "/upload/multipart"
+		}
+
+		resp := StartUploadResp{
+			Uploads: []UploadPart{{
+				UUID:     "uuid",
+				UploadId: "upload-id",
+				URLs:     urls,
+			}},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+	serverURL = mockServer.URL
+
+	cfg.Endpoints = endpoints.NewConfig(serverURL)
+
+	state, err := newMultipartUploadState(cfg, int64(len(largeContent)))
+	if err != nil {
+		t.Fatalf("failed to create state: %v", err)
+	}
+
+	reader := bytes.NewReader(largeContent)
+	_, err = state.executeMultipartUpload(ctx, reader)
+
+	// Should get context cancellation error
+	if err == nil {
+		t.Error("expected error for cancelled context, got nil")
+	}
+}
+
+// TestEncryptAndUploadPipelinedError tests error handling in the pipeline
+func TestEncryptAndUploadPipelinedError(t *testing.T) {
+	cfg := &config.Config{
+		Mnemonic:   TestMnemonic,
+		Bucket:     TestBucket2,
+		HTTPClient: &http.Client{},
+	}
+
+	testData := make([]byte, config.DefaultChunkSize*2)
+	state, _ := newMultipartUploadState(cfg, int64(len(testData)))
+
+	callCount := 0
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		// Fail all upload requests
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("upload failed"))
+	}))
+	defer mockServer.Close()
+
+	urls := make([]string, state.numParts)
+	for i := range urls {
+		urls[i] = mockServer.URL
+	}
+
+	state.startResp = &StartUploadResp{
+		Uploads: []UploadPart{{
+			UUID:     "uuid",
+			UploadId: "upload-id",
+			URLs:     urls,
+		}},
+	}
+	state.uuid = "uuid"
+	state.uploadId = "upload-id"
+
+	reader := bytes.NewReader(testData)
+	_, _, err := state.encryptAndUploadPipelined(context.Background(), reader)
+
+	if err == nil {
+		t.Error("expected error for failed uploads, got nil")
+	}
+}
+
+// TestExecuteMultipartUploadWrongURLCount tests handling of incorrect URL count
+func TestExecuteMultipartUploadWrongURLCount(t *testing.T) {
+	cfg := &config.Config{
+		Mnemonic:   TestMnemonic,
+		Bucket:     TestBucket3,
+		HTTPClient: &http.Client{},
+	}
+
+	testData := make([]byte, config.DefaultChunkSize*3)
+	state, _ := newMultipartUploadState(cfg, int64(len(testData)))
+
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Return wrong number of URLs
+		resp := StartUploadResp{
+			Uploads: []UploadPart{{
+				UUID:     "uuid",
+				UploadId: "upload-id",
+				URLs:     []string{"url1"}, // Only 1 URL when 3 expected
+			}},
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+
+	cfg.Endpoints = endpoints.NewConfig(mockServer.URL)
+
+	reader := bytes.NewReader(testData)
+	_, err := state.executeMultipartUpload(context.Background(), reader)
+
+	if err == nil {
+		t.Error("expected error for wrong URL count, got nil")
+	}
+	if !strings.Contains(err.Error(), "expected") {
+		t.Errorf("expected error about URL count, got: %v", err)
+	}
+}
+
+// TestExecuteMultipartUploadWrongUploadCount tests handling of incorrect upload count
+func TestExecuteMultipartUploadWrongUploadCount(t *testing.T) {
+	cfg := &config.Config{
+		Mnemonic:   TestMnemonic,
+		Bucket:     TestBucket4,
+		HTTPClient: &http.Client{},
+	}
+
+	testData := make([]byte, config.DefaultChunkSize*2)
+	state, _ := newMultipartUploadState(cfg, int64(len(testData)))
+
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Return wrong number of upload entries
+		resp := StartUploadResp{
+			Uploads: []UploadPart{}, // Empty array
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+
+	cfg.Endpoints = endpoints.NewConfig(mockServer.URL)
+
+	reader := bytes.NewReader(testData)
+	_, err := state.executeMultipartUpload(context.Background(), reader)
+
+	if err == nil {
+		t.Error("expected error for wrong upload count, got nil")
+	}
+	if !strings.Contains(err.Error(), "expected 1 upload entry") {
+		t.Errorf("expected error about upload count, got: %v", err)
 	}
 }

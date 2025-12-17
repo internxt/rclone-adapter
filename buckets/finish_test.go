@@ -3,6 +3,7 @@ package buckets
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +12,270 @@ import (
 	"github.com/internxt/rclone-adapter/config"
 	"github.com/internxt/rclone-adapter/endpoints"
 )
+
+// TestFinishUpload tests the single-part upload completion functionality
+func TestFinishUpload(t *testing.T) {
+	testCases := []struct {
+		name           string
+		bucketID       string
+		index          string
+		shards         []Shard
+		mockResponse   FinishUploadResp
+		mockStatusCode int
+		mockBody       string
+		expectError    bool
+		errorContains  string
+	}{
+		{
+			name:     "successful single shard upload",
+			bucketID: TestBucket1,
+			index:    "abc123def456",
+			shards: []Shard{
+				{Hash: "hash1", UUID: "uuid1"},
+			},
+			mockResponse: FinishUploadResp{
+				Bucket:   TestBucket1,
+				Index:    "abc123def456",
+				ID:       TestFileID,
+				Version:  1,
+				Created:  "2025-01-01T00:00:00Z",
+				Mimetype: "application/octet-stream",
+				Filename: "test-file",
+			},
+			mockStatusCode: http.StatusOK,
+			expectError:    false,
+		},
+		{
+			name:     "successful multiple shards",
+			bucketID: TestBucket2,
+			index:    "multi-shard-index",
+			shards: []Shard{
+				{Hash: "hash1", UUID: "uuid1"},
+				{Hash: "hash2", UUID: "uuid2"},
+				{Hash: "hash3", UUID: "uuid3"},
+			},
+			mockResponse: FinishUploadResp{
+				ID:      "multi-file-id",
+				Bucket:  TestBucket2,
+				Version: 2,
+			},
+			mockStatusCode: http.StatusOK,
+			expectError:    false,
+		},
+		{
+			name:           "error - duplicate key",
+			bucketID:       TestBucket3,
+			index:          "duplicate-index",
+			shards:         []Shard{{Hash: "hash", UUID: "uuid"}},
+			mockStatusCode: http.StatusInternalServerError,
+			mockBody:       `{"error": "duplicate key error collection: buckets"}`,
+			expectError:    true,
+			errorContains:  "duplicate shard",
+		},
+		{
+			name:           "error - server 500",
+			bucketID:       TestBucket4,
+			index:          "error-index",
+			shards:         []Shard{{Hash: "hash", UUID: "uuid"}},
+			mockStatusCode: http.StatusInternalServerError,
+			mockBody:       "internal server error",
+			expectError:    true,
+			errorContains:  "finish upload failed",
+		},
+		{
+			name:           "error - unauthorized 401",
+			bucketID:       TestBucket5,
+			index:          "unauth-index",
+			shards:         []Shard{{Hash: "hash", UUID: "uuid"}},
+			mockStatusCode: http.StatusUnauthorized,
+			mockBody:       "unauthorized",
+			expectError:    true,
+			errorContains:  "401",
+		},
+		{
+			name:           "error - bad request 400",
+			bucketID:       TestBucket6,
+			index:          "bad-index",
+			shards:         []Shard{},
+			mockStatusCode: http.StatusBadRequest,
+			mockBody:       "invalid request",
+			expectError:    true,
+			errorContains:  "400",
+		},
+		{
+			name:           "error - not found 404",
+			bucketID:       "nonexistent-bucket",
+			index:          "index",
+			shards:         []Shard{{Hash: "hash", UUID: "uuid"}},
+			mockStatusCode: http.StatusNotFound,
+			mockBody:       "bucket not found",
+			expectError:    true,
+			errorContains:  "404",
+		},
+		{
+			name:           "error - invalid JSON response",
+			bucketID:       TestBucket1,
+			index:          "valid-index",
+			shards:         []Shard{{Hash: "hash", UUID: "uuid"}},
+			mockStatusCode: http.StatusOK,
+			mockBody:       "invalid json {{{",
+			expectError:    true,
+			errorContains:  "failed to unmarshal",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != "POST" {
+					t.Errorf("expected POST request, got %s", r.Method)
+				}
+
+				if r.Header.Get("Authorization") == "" {
+					t.Error("Authorization header missing")
+				}
+				if r.Header.Get("internxt-version") != "1.0" {
+					t.Errorf("expected internxt-version 1.0, got %s", r.Header.Get("internxt-version"))
+				}
+				if r.Header.Get("internxt-client") != "rclone" {
+					t.Errorf("expected internxt-client rclone, got %s", r.Header.Get("internxt-client"))
+				}
+				if r.Header.Get("Content-Type") != "application/json; charset=utf-8" {
+					t.Errorf("expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
+				}
+
+				var reqBody map[string]any
+				if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil && !tc.expectError {
+					t.Errorf("failed to decode request body: %v", err)
+				}
+
+				if !tc.expectError || tc.mockStatusCode == http.StatusOK {
+					if reqBody["index"] != tc.index {
+						t.Errorf("expected index %s, got %v", tc.index, reqBody["index"])
+					}
+
+					shards, ok := reqBody["shards"].([]any)
+					if !ok {
+						t.Error("shards field missing or not an array")
+					} else if len(shards) != len(tc.shards) {
+						t.Errorf("expected %d shards, got %d", len(tc.shards), len(shards))
+					}
+				}
+
+				w.WriteHeader(tc.mockStatusCode)
+				if tc.mockBody != "" {
+					w.Write([]byte(tc.mockBody))
+				} else if tc.mockStatusCode == http.StatusOK {
+					json.NewEncoder(w).Encode(tc.mockResponse)
+				} else {
+					w.Write([]byte("error message"))
+				}
+			}))
+			defer mockServer.Close()
+
+			cfg := &config.Config{
+				BasicAuthHeader: TestBasicAuth,
+				HTTPClient:      &http.Client{},
+				Endpoints:       endpoints.NewConfig(mockServer.URL),
+			}
+
+			result, err := FinishUpload(context.Background(), cfg, tc.bucketID, tc.index, tc.shards)
+
+			if tc.expectError {
+				if err == nil {
+					t.Error("expected error, got nil")
+				}
+				if tc.errorContains != "" && !strings.Contains(err.Error(), tc.errorContains) {
+					t.Errorf("expected error to contain '%s', got: %v", tc.errorContains, err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if result == nil {
+					t.Fatal("expected result, got nil")
+				}
+				if result.ID != tc.mockResponse.ID {
+					t.Errorf("expected ID %s, got %s", tc.mockResponse.ID, result.ID)
+				}
+				if tc.mockResponse.Bucket != "" && result.Bucket != tc.mockResponse.Bucket {
+					t.Errorf("expected Bucket %s, got %s", tc.mockResponse.Bucket, result.Bucket)
+				}
+			}
+		})
+	}
+}
+
+// TestFinishUploadContextCancellation tests context cancellation handling
+func TestFinishUploadContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	cfg := &config.Config{
+		BasicAuthHeader: TestBasicAuth,
+		HTTPClient:      &http.Client{},
+		Endpoints:       endpoints.NewConfig("http://localhost:9999"),
+	}
+
+	_, err := FinishUpload(ctx, cfg, TestBucket1, "index", []Shard{{Hash: "hash", UUID: "uuid"}})
+	if err == nil {
+		t.Error("expected error for cancelled context, got nil")
+	}
+}
+
+// TestFinishUploadRequestPayload tests the exact payload structure
+func TestFinishUploadRequestPayload(t *testing.T) {
+	var capturedPayload map[string]any
+	var capturedBody []byte
+
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedBody, _ = io.ReadAll(r.Body)
+		json.Unmarshal(capturedBody, &capturedPayload)
+
+		response := FinishUploadResp{ID: "test-id"}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer mockServer.Close()
+
+	cfg := &config.Config{
+		BasicAuthHeader: TestBasicAuth,
+		HTTPClient:      &http.Client{},
+		Endpoints:       endpoints.NewConfig(mockServer.URL),
+	}
+
+	shards := []Shard{
+		{Hash: "hash1", UUID: "uuid1"},
+		{Hash: "hash2", UUID: "uuid2"},
+	}
+
+	_, err := FinishUpload(context.Background(), cfg, TestBucket1, "test-index-789", shards)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if capturedPayload["index"] != "test-index-789" {
+		t.Errorf("expected index 'test-index-789', got %v", capturedPayload["index"])
+	}
+
+	shardsData, ok := capturedPayload["shards"].([]any)
+	if !ok {
+		t.Fatal("shards field missing or not an array")
+	}
+
+	if len(shardsData) != 2 {
+		t.Fatalf("expected 2 shards, got %d", len(shardsData))
+	}
+
+	// Verify first shard
+	shard1 := shardsData[0].(map[string]any)
+	if shard1["hash"] != "hash1" {
+		t.Errorf("expected hash 'hash1', got %v", shard1["hash"])
+	}
+	if shard1["uuid"] != "uuid1" {
+		t.Errorf("expected uuid 'uuid1', got %v", shard1["uuid"])
+	}
+}
 
 // TestFinishMultipartUpload tests the multipart upload completion functionality
 func TestFinishMultipartUpload(t *testing.T) {
