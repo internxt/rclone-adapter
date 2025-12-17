@@ -16,10 +16,11 @@ import (
 )
 
 // chunkBufferPool reuses memory buffers for chunk encryption to reduce GC pressure
+// Uses sync.Pool without pre-allocation - buffers are only created when actually needed
 var chunkBufferPool = sync.Pool{
 	New: func() any {
-		buf := make([]byte, config.DefaultChunkSize)
-		return &buf
+		// Return nil - allocate on-demand
+		return nil
 	},
 }
 
@@ -159,8 +160,31 @@ func (s *multipartUploadState) encryptAndUploadPipelined(ctx context.Context, re
 				chunkSize = s.totalSize - (i * s.chunkSize)
 			}
 
-			plainBufPtr := chunkBufferPool.Get().(*[]byte)
-			encryptedBufPtr := chunkBufferPool.Get().(*[]byte)
+			// Get buffers from pool or allocate at exact size needed
+			var plainBufPtr, encryptedBufPtr *[]byte
+
+			if poolBuf := chunkBufferPool.Get(); poolBuf != nil {
+				plainBufPtr = poolBuf.(*[]byte)
+				// Resize if buffer is too small
+				if int64(cap(*plainBufPtr)) < chunkSize {
+					buf := make([]byte, chunkSize)
+					plainBufPtr = &buf
+				}
+			} else {
+				buf := make([]byte, chunkSize)
+				plainBufPtr = &buf
+			}
+
+			if poolBuf := chunkBufferPool.Get(); poolBuf != nil {
+				encryptedBufPtr = poolBuf.(*[]byte)
+				if int64(cap(*encryptedBufPtr)) < chunkSize {
+					buf := make([]byte, chunkSize)
+					encryptedBufPtr = &buf
+				}
+			} else {
+				buf := make([]byte, chunkSize)
+				encryptedBufPtr = &buf
+			}
 
 			plainChunk := (*plainBufPtr)[:chunkSize]
 			n, err := io.ReadFull(reader, plainChunk)
