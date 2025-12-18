@@ -10,8 +10,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/internxt/rclone-adapter/config"
 )
 
 func TestTransfer(t *testing.T) {
@@ -47,9 +45,7 @@ func TestTransfer(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			HTTPClient: &http.Client{},
-		}
+		cfg := newEmptyTestConfig()
 
 		result, err := Transfer(context.Background(), cfg, mockServer.URL, bytes.NewReader(testData), int64(len(testData)))
 		if err != nil {
@@ -71,9 +67,7 @@ func TestTransfer(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			HTTPClient: &http.Client{},
-		}
+		cfg := newEmptyTestConfig()
 
 		result, err := Transfer(context.Background(), cfg, mockServer.URL, bytes.NewReader(testData), int64(len(testData)))
 		if err != nil {
@@ -94,9 +88,7 @@ func TestTransfer(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			HTTPClient: &http.Client{},
-		}
+		cfg := newEmptyTestConfig()
 
 		_, err := Transfer(context.Background(), cfg, mockServer.URL, bytes.NewReader(testData), int64(len(testData)))
 		if err == nil {
@@ -116,9 +108,7 @@ func TestTransfer(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			HTTPClient: &http.Client{},
-		}
+		cfg := newEmptyTestConfig()
 
 		_, err := Transfer(context.Background(), cfg, mockServer.URL, bytes.NewReader(testData), int64(len(testData)))
 		if err == nil {
@@ -137,9 +127,7 @@ func TestTransfer(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			HTTPClient: &http.Client{},
-		}
+		cfg := newEmptyTestConfig()
 
 		result, err := Transfer(context.Background(), cfg, mockServer.URL, bytes.NewReader(testData), int64(len(testData)))
 		if err != nil {

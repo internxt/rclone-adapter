@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/internxt/rclone-adapter/config"
-	"github.com/internxt/rclone-adapter/endpoints"
 	"github.com/internxt/rclone-adapter/buckets"
 )
 
@@ -73,11 +71,7 @@ func TestDeleteFile(t *testing.T) {
 			}))
 			defer mockServer.Close()
 
-			cfg := &config.Config{
-				Token:     "test-token",
-				Endpoints: endpoints.NewConfig(mockServer.URL),
-			}
-			cfg.ApplyDefaults()
+			cfg := newTestConfig(mockServer.URL)
 
 			err := DeleteFile(context.Background(), cfg, tc.uuid)
 
@@ -185,11 +179,7 @@ func TestRenameFile(t *testing.T) {
 			}))
 			defer mockServer.Close()
 
-			cfg := &config.Config{
-				Token:     "test-token",
-				Endpoints: endpoints.NewConfig(mockServer.URL),
-			}
-			cfg.ApplyDefaults()
+			cfg := newTestConfig(mockServer.URL)
 
 			err := RenameFile(context.Background(), cfg, tc.fileUUID, tc.newPlainName, tc.newType)
 

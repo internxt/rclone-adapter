@@ -19,7 +19,7 @@ const (
 	DefaultChunkSize        = 30 * 1024 * 1024
 	DefaultMultipartMinSize = 100 * 1024 * 1024
 	DefaultMaxConcurrency   = 6
-	ClientName              = "rclone"
+	ClientName              = "rclone-adapter"
 )
 
 type Config struct {

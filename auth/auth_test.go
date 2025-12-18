@@ -7,9 +7,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/internxt/rclone-adapter/config"
-	"github.com/internxt/rclone-adapter/endpoints"
 )
 
 // mockAccessResponse creates a valid AccessResponse for testing
@@ -90,11 +87,7 @@ func TestRefreshToken(t *testing.T) {
 			}))
 			defer mockServer.Close()
 
-			cfg := &config.Config{
-				Token:     tc.token,
-				Endpoints: endpoints.NewConfig(mockServer.URL),
-			}
-			cfg.ApplyDefaults()
+			cfg := newTestConfig(mockServer.URL, tc.token)
 
 			result, err := RefreshToken(context.Background(), cfg)
 
@@ -128,11 +121,7 @@ func TestRefreshTokenInvalidJSON(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	cfg := &config.Config{
-		Token:     "test-token",
-		Endpoints: endpoints.NewConfig(mockServer.URL),
-	}
-	cfg.ApplyDefaults()
+	cfg := newTestConfig(mockServer.URL, "test-token")
 
 	_, err := RefreshToken(context.Background(), cfg)
 
@@ -164,11 +153,7 @@ func TestRefreshTokenRequestFormat(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	cfg := &config.Config{
-		Token:     "my-test-token",
-		Endpoints: endpoints.NewConfig(mockServer.URL),
-	}
-	cfg.ApplyDefaults()
+	cfg := newTestConfig(mockServer.URL, "my-test-token")
 
 	_, err := RefreshToken(context.Background(), cfg)
 	if err != nil {

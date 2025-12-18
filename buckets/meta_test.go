@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/internxt/rclone-adapter/config"
-	"github.com/internxt/rclone-adapter/endpoints"
 )
 
 func TestCreateMetaFile(t *testing.T) {
@@ -109,8 +108,8 @@ func TestCreateMetaFile(t *testing.T) {
 					t.Errorf("expected internxt-version v1.0.436, got %s", r.Header.Get("internxt-version"))
 				}
 
-				if r.Header.Get("internxt-client") != "drive-web" {
-					t.Errorf("expected internxt-client drive-web, got %s", r.Header.Get("internxt-client"))
+				if r.Header.Get("internxt-client") != config.ClientName {
+					t.Errorf("expected internxt-client %s, got %s", config.ClientName, r.Header.Get("internxt-client"))
 				}
 
 				if r.Header.Get("Content-Type") != "application/json; charset=utf-8" {
@@ -130,11 +129,7 @@ func TestCreateMetaFile(t *testing.T) {
 			}))
 			defer mockServer.Close()
 
-			cfg := &config.Config{
-				Token:      TestToken,
-				HTTPClient: &http.Client{},
-				Endpoints:  endpoints.NewConfig(mockServer.URL),
-			}
+			cfg := newTestConfig(mockServer.URL)
 
 			result, err := CreateMetaFile(
 				context.Background(),
@@ -180,11 +175,7 @@ func TestCreateMetaFileInvalidJSON(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	cfg := &config.Config{
-		Token:      TestToken,
-		HTTPClient: &http.Client{},
-		Endpoints:  endpoints.NewConfig(mockServer.URL),
-	}
+	cfg := newTestConfig(mockServer.URL)
 
 	_, err := CreateMetaFile(
 		context.Background(),

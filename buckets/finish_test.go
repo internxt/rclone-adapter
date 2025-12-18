@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/internxt/rclone-adapter/config"
-	"github.com/internxt/rclone-adapter/endpoints"
 )
 
 // TestFinishUpload tests the single-part upload completion functionality
@@ -137,8 +136,8 @@ func TestFinishUpload(t *testing.T) {
 				if r.Header.Get("internxt-version") != "1.0" {
 					t.Errorf("expected internxt-version 1.0, got %s", r.Header.Get("internxt-version"))
 				}
-				if r.Header.Get("internxt-client") != "rclone" {
-					t.Errorf("expected internxt-client rclone, got %s", r.Header.Get("internxt-client"))
+				if r.Header.Get("internxt-client") != config.ClientName {
+					t.Errorf("expected internxt-client %s, got %s", config.ClientName, r.Header.Get("internxt-client"))
 				}
 				if r.Header.Get("Content-Type") != "application/json; charset=utf-8" {
 					t.Errorf("expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
@@ -173,11 +172,7 @@ func TestFinishUpload(t *testing.T) {
 			}))
 			defer mockServer.Close()
 
-			cfg := &config.Config{
-				BasicAuthHeader: TestBasicAuth,
-				HTTPClient:      &http.Client{},
-				Endpoints:       endpoints.NewConfig(mockServer.URL),
-			}
+			cfg := newTestConfig(mockServer.URL)
 
 			result, err := FinishUpload(context.Background(), cfg, tc.bucketID, tc.index, tc.shards)
 
@@ -211,11 +206,7 @@ func TestFinishUploadContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	cfg := &config.Config{
-		BasicAuthHeader: TestBasicAuth,
-		HTTPClient:      &http.Client{},
-		Endpoints:       endpoints.NewConfig("http://localhost:9999"),
-	}
+	cfg := newTestConfig("http://localhost:9999")
 
 	_, err := FinishUpload(ctx, cfg, TestBucket1, "index", []Shard{{Hash: "hash", UUID: "uuid"}})
 	if err == nil {
@@ -238,11 +229,7 @@ func TestFinishUploadRequestPayload(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	cfg := &config.Config{
-		BasicAuthHeader: TestBasicAuth,
-		HTTPClient:      &http.Client{},
-		Endpoints:       endpoints.NewConfig(mockServer.URL),
-	}
+	cfg := newTestConfig(mockServer.URL)
 
 	shards := []Shard{
 		{Hash: "hash1", UUID: "uuid1"},
@@ -402,8 +389,8 @@ func TestFinishMultipartUpload(t *testing.T) {
 				if r.Header.Get("internxt-version") != "1.0" {
 					t.Errorf("expected internxt-version 1.0, got %s", r.Header.Get("internxt-version"))
 				}
-				if r.Header.Get("internxt-client") != "rclone" {
-					t.Errorf("expected internxt-client rclone, got %s", r.Header.Get("internxt-client"))
+				if r.Header.Get("internxt-client") != config.ClientName {
+					t.Errorf("expected internxt-client %s, got %s", config.ClientName, r.Header.Get("internxt-client"))
 				}
 				if r.Header.Get("Content-Type") != "application/json; charset=utf-8" {
 					t.Errorf("expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
@@ -465,11 +452,7 @@ func TestFinishMultipartUpload(t *testing.T) {
 			defer mockServer.Close()
 
 			// Create config with mock endpoint
-			cfg := &config.Config{
-				BasicAuthHeader: TestBasicAuth,
-				Endpoints:       endpoints.NewConfig(mockServer.URL),
-			}
-			cfg.ApplyDefaults()
+			cfg := newTestConfig(mockServer.URL)
 
 			// Call FinishMultipartUpload
 			result, err := FinishMultipartUpload(context.Background(), cfg, TestBucket1, "test-index", tc.shard)
@@ -513,11 +496,7 @@ func TestFinishMultipartUploadPayloadStructure(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	cfg := &config.Config{
-		BasicAuthHeader: TestBasicAuth,
-		HTTPClient:      &http.Client{},
-		Endpoints:       endpoints.NewConfig(mockServer.URL),
-	}
+	cfg := newTestConfig(mockServer.URL)
 
 	shard := MultipartShard{
 		UUID:     "uuid-123",
@@ -582,11 +561,7 @@ func TestFinishMultipartUploadEmptyParts(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	cfg := &config.Config{
-		BasicAuthHeader: TestBasicAuth,
-		HTTPClient:      &http.Client{},
-		Endpoints:       endpoints.NewConfig(mockServer.URL),
-	}
+	cfg := newTestConfig(mockServer.URL)
 
 	shard := MultipartShard{
 		UUID:     "uuid",

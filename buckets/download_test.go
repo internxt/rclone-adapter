@@ -552,8 +552,8 @@ func TestGetBucketFileInfo(t *testing.T) {
 			if r.Header.Get("internxt-version") != "1.0" {
 				t.Errorf("expected internxt-version 1.0, got %s", r.Header.Get("internxt-version"))
 			}
-			if r.Header.Get("internxt-client") != "rclone" {
-				t.Errorf("expected internxt-client rclone, got %s", r.Header.Get("internxt-client"))
+			if r.Header.Get("internxt-client") != config.ClientName {
+				t.Errorf("expected internxt-client %s, got %s", config.ClientName, r.Header.Get("internxt-client"))
 			}
 
 			w.WriteHeader(http.StatusOK)
@@ -561,11 +561,7 @@ func TestGetBucketFileInfo(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			BasicAuthHeader: TestBasicAuth,
-			Endpoints:       endpoints.NewConfig(mockServer.URL),
-		}
-		cfg.ApplyDefaults()
+		cfg := newTestConfig(mockServer.URL)
 
 		info, err := GetBucketFileInfo(context.Background(), cfg, TestBucket1, TestFileID)
 		if err != nil {
@@ -587,11 +583,7 @@ func TestGetBucketFileInfo(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			BasicAuthHeader: TestBasicAuth,
-			Endpoints:       endpoints.NewConfig(mockServer.URL),
-		}
-		cfg.ApplyDefaults()
+		cfg := newTestConfig(mockServer.URL)
 
 		_, err := GetBucketFileInfo(context.Background(), cfg, TestBucket1, "non-existent")
 		if err == nil {
@@ -609,11 +601,7 @@ func TestGetBucketFileInfo(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			BasicAuthHeader: TestBasicAuth,
-			Endpoints:       endpoints.NewConfig(mockServer.URL),
-		}
-		cfg.ApplyDefaults()
+		cfg := newTestConfig(mockServer.URL)
 
 		_, err := GetBucketFileInfo(context.Background(), cfg, TestBucket1, "file-id")
 		if err == nil {
