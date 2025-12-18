@@ -64,7 +64,6 @@ func CreateMetaFile(ctx context.Context, cfg *config.Config, name, bucketID, fil
 	}
 	req.Header.Set("Authorization", "Bearer "+cfg.Token)
 	req.Header.Set("internxt-version", "v1.0.436")
-	req.Header.Set("internxt-client", "drive-web")
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {

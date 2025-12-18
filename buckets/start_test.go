@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/internxt/rclone-adapter/config"
-	"github.com/internxt/rclone-adapter/endpoints"
 )
 
 // TestStartUploadMultipart tests the multipart upload start functionality
@@ -85,8 +84,8 @@ func TestStartUploadMultipart(t *testing.T) {
 				if r.Header.Get("internxt-version") != "1.0" {
 					t.Errorf("expected internxt-version 1.0, got %s", r.Header.Get("internxt-version"))
 				}
-				if r.Header.Get("internxt-client") != "rclone" {
-					t.Errorf("expected internxt-client rclone, got %s", r.Header.Get("internxt-client"))
+				if r.Header.Get("internxt-client") != config.ClientName {
+					t.Errorf("expected internxt-client %s, got %s", config.ClientName, r.Header.Get("internxt-client"))
 				}
 				if r.Header.Get("Content-Type") != "application/json; charset=utf-8" {
 					t.Errorf("expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
@@ -123,11 +122,7 @@ func TestStartUploadMultipart(t *testing.T) {
 			}))
 			defer mockServer.Close()
 
-			cfg := &config.Config{
-				BasicAuthHeader: TestBasicAuth,
-				HTTPClient:      &http.Client{},
-				Endpoints:       endpoints.NewConfig(mockServer.URL),
-			}
+			cfg := newTestConfig(mockServer.URL)
 
 			specs := []UploadPartSpec{
 				{Index: 0, Size: tc.fileSize},
@@ -192,11 +187,7 @@ func TestStartUploadMultipartRequestFormat(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	cfg := &config.Config{
-		BasicAuthHeader: TestBasicAuth,
-		HTTPClient:      &http.Client{},
-		Endpoints:       endpoints.NewConfig(mockServer.URL),
-	}
+	cfg := newTestConfig(mockServer.URL)
 
 	specs := []UploadPartSpec{
 		{Index: 0, Size: 100 * 1024 * 1024},
@@ -335,8 +326,8 @@ func TestStartUpload(t *testing.T) {
 				if r.Header.Get("internxt-version") != "1.0" {
 					t.Errorf("expected internxt-version 1.0, got %s", r.Header.Get("internxt-version"))
 				}
-				if r.Header.Get("internxt-client") != "rclone" {
-					t.Errorf("expected internxt-client rclone, got %s", r.Header.Get("internxt-client"))
+				if r.Header.Get("internxt-client") != config.ClientName {
+					t.Errorf("expected internxt-client %s, got %s", config.ClientName, r.Header.Get("internxt-client"))
 				}
 				if r.Header.Get("Content-Type") != "application/json; charset=utf-8" {
 					t.Errorf("expected Content-Type application/json; charset=utf-8, got %s", r.Header.Get("Content-Type"))
@@ -375,11 +366,7 @@ func TestStartUpload(t *testing.T) {
 			}))
 			defer mockServer.Close()
 
-			cfg := &config.Config{
-				BasicAuthHeader: TestBasicAuth,
-				HTTPClient:      &http.Client{},
-				Endpoints:       endpoints.NewConfig(mockServer.URL),
-			}
+			cfg := newTestConfig(mockServer.URL)
 
 			result, err := StartUpload(context.Background(), cfg, TestBucket1, tc.parts)
 
@@ -434,11 +421,7 @@ func TestStartUploadRequestFormat(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	cfg := &config.Config{
-		BasicAuthHeader: TestBasicAuth,
-		HTTPClient:      &http.Client{},
-		Endpoints:       endpoints.NewConfig(mockServer.URL),
-	}
+	cfg := newTestConfig(mockServer.URL)
 
 	specs := []UploadPartSpec{
 		{Index: 0, Size: 50 * 1024 * 1024},
@@ -480,11 +463,7 @@ func TestStartUploadJSONMarshalError(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	cfg := &config.Config{
-		BasicAuthHeader: TestBasicAuth,
-		HTTPClient:      &http.Client{},
-		Endpoints:       endpoints.NewConfig(mockServer.URL),
-	}
+	cfg := newTestConfig(mockServer.URL)
 
 	specs := []UploadPartSpec{
 		{Index: 0, Size: 10 * 1024 * 1024},
@@ -504,11 +483,7 @@ func TestStartUploadInvalidJSONResponse(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	cfg := &config.Config{
-		BasicAuthHeader: TestBasicAuth,
-		HTTPClient:      &http.Client{},
-		Endpoints:       endpoints.NewConfig(mockServer.URL),
-	}
+	cfg := newTestConfig(mockServer.URL)
 
 	specs := []UploadPartSpec{
 		{Index: 0, Size: 10 * 1024 * 1024},
@@ -528,11 +503,7 @@ func TestStartUploadContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	cfg := &config.Config{
-		BasicAuthHeader: TestBasicAuth,
-		HTTPClient:      &http.Client{},
-		Endpoints:       endpoints.NewConfig("http://localhost:9999"),
-	}
+	cfg := newTestConfig("http://localhost:9999")
 
 	specs := []UploadPartSpec{
 		{Index: 0, Size: 10 * 1024 * 1024},
@@ -552,11 +523,7 @@ func TestStartUploadMultipartInvalidJSONResponse(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	cfg := &config.Config{
-		BasicAuthHeader: TestBasicAuth,
-		HTTPClient:      &http.Client{},
-		Endpoints:       endpoints.NewConfig(mockServer.URL),
-	}
+	cfg := newTestConfig(mockServer.URL)
 
 	specs := []UploadPartSpec{
 		{Index: 0, Size: 100 * 1024 * 1024},
@@ -576,11 +543,7 @@ func TestStartUploadMultipartContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	cfg := &config.Config{
-		BasicAuthHeader: TestBasicAuth,
-		HTTPClient:      &http.Client{},
-		Endpoints:       endpoints.NewConfig("http://localhost:9999"),
-	}
+	cfg := newTestConfig("http://localhost:9999")
 
 	specs := []UploadPartSpec{
 		{Index: 0, Size: 100 * 1024 * 1024},

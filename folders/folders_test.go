@@ -8,9 +8,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/internxt/rclone-adapter/config"
-	"github.com/internxt/rclone-adapter/endpoints"
 )
 
 func TestCreateFolder(t *testing.T) {
@@ -57,11 +54,7 @@ func TestCreateFolder(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
-		}
+		cfg := newTestConfig(mockServer.URL)
 
 		reqBody := CreateFolderRequest{
 			PlainName:        "test-folder",
@@ -100,11 +93,7 @@ func TestCreateFolder(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
-		}
+		cfg := newTestConfig(mockServer.URL)
 
 		reqBody := CreateFolderRequest{
 			PlainName:        "test-folder",
@@ -127,11 +116,7 @@ func TestCreateFolder(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
-		}
+		cfg := newTestConfig(mockServer.URL)
 
 		reqBody := CreateFolderRequest{
 			PlainName:        "test-folder",
@@ -151,11 +136,7 @@ func TestCreateFolder(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
-		}
+		cfg := newTestConfig(mockServer.URL)
 
 		reqBody := CreateFolderRequest{
 			PlainName:        "test-folder",
@@ -178,11 +159,7 @@ func TestCreateFolder(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
-		}
+		cfg := newTestConfig(mockServer.URL)
 
 		reqBody := CreateFolderRequest{
 			PlainName:        "test-folder",
@@ -219,11 +196,7 @@ func TestDeleteFolder(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
-		}
+		cfg := newTestConfig(mockServer.URL)
 
 		err := DeleteFolder(context.Background(), cfg, "test-uuid")
 		if err != nil {
@@ -238,11 +211,7 @@ func TestDeleteFolder(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
-		}
+		cfg := newTestConfig(mockServer.URL)
 
 		err := DeleteFolder(context.Background(), cfg, "non-existent-uuid")
 		if err == nil {
@@ -260,11 +229,7 @@ func TestDeleteFolder(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
-		}
+		cfg := newTestConfig(mockServer.URL)
 
 		err := DeleteFolder(context.Background(), cfg, "test-uuid")
 		if err == nil {
@@ -310,11 +275,7 @@ func TestListFolders(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
-		}
+		cfg := newTestConfig(mockServer.URL)
 
 		folders, err := ListFolders(context.Background(), cfg, "parent-uuid", ListOptions{})
 		if err != nil {
@@ -352,11 +313,7 @@ func TestListFolders(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
-		}
+		cfg := newTestConfig(mockServer.URL)
 
 		opts := ListOptions{
 			Offset: 10,
@@ -389,11 +346,7 @@ func TestListFolders(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
-		}
+		cfg := newTestConfig(mockServer.URL)
 
 		opts := ListOptions{
 			Limit:  -5,  // Should default to 50
@@ -413,11 +366,7 @@ func TestListFolders(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
-		}
+		cfg := newTestConfig(mockServer.URL)
 
 		_, err := ListFolders(context.Background(), cfg, "parent-uuid", ListOptions{})
 		if err == nil {
@@ -435,11 +384,7 @@ func TestListFolders(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
-		}
+		cfg := newTestConfig(mockServer.URL)
 
 		_, err := ListFolders(context.Background(), cfg, "parent-uuid", ListOptions{})
 		if err == nil {
@@ -472,11 +417,7 @@ func TestListFiles(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
-		}
+		cfg := newTestConfig(mockServer.URL)
 
 		files, err := ListFiles(context.Background(), cfg, "parent-uuid", ListOptions{})
 		if err != nil {
@@ -498,11 +439,7 @@ func TestListFiles(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
-		}
+		cfg := newTestConfig(mockServer.URL)
 
 		_, err := ListFiles(context.Background(), cfg, "non-existent-uuid", ListOptions{})
 		if err == nil {
@@ -546,11 +483,7 @@ func TestListAllFiles(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
-		}
+		cfg := newTestConfig(mockServer.URL)
 
 		files, err := ListAllFiles(context.Background(), cfg, "parent-uuid")
 		if err != nil {
@@ -578,11 +511,7 @@ func TestListAllFiles(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
-		}
+		cfg := newTestConfig(mockServer.URL)
 
 		files, err := ListAllFiles(context.Background(), cfg, "parent-uuid")
 		if err != nil {
@@ -601,11 +530,7 @@ func TestListAllFiles(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
-		}
+		cfg := newTestConfig(mockServer.URL)
 
 		_, err := ListAllFiles(context.Background(), cfg, "parent-uuid")
 		if err == nil {
@@ -642,11 +567,7 @@ func TestListAllFolders(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
-		}
+		cfg := newTestConfig(mockServer.URL)
 
 		folders, err := ListAllFolders(context.Background(), cfg, "parent-uuid")
 		if err != nil {
@@ -666,11 +587,7 @@ func TestListAllFolders(t *testing.T) {
 		}))
 		defer mockServer.Close()
 
-		cfg := &config.Config{
-			Token:      "test-token",
-			HTTPClient: &http.Client{},
-			Endpoints:  endpoints.NewConfig(mockServer.URL),
-		}
+		cfg := newTestConfig(mockServer.URL)
 
 		_, err := ListAllFolders(context.Background(), cfg, "parent-uuid")
 		if err == nil {

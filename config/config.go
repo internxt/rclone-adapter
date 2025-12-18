@@ -19,6 +19,7 @@ const (
 	DefaultChunkSize        = 30 * 1024 * 1024
 	DefaultMultipartMinSize = 100 * 1024 * 1024
 	DefaultMaxConcurrency   = 6
+	ClientName              = "rclone-adapter"
 )
 
 type Config struct {
@@ -44,11 +45,13 @@ func NewDefaultToken(token string) *Config {
 	cfg := &Config{
 		Token: token,
 	}
-	cfg.applyDefaults()
+	cfg.ApplyDefaults()
 	return cfg
 }
 
-func (c *Config) applyDefaults() {
+// ApplyDefaults sets default values for any unset configuration fields.
+// This is useful for test configurations to ensure they have properly configured HTTPClient with custom transport.
+func (c *Config) ApplyDefaults() {
 	if c.DriveAPIURL == "" {
 		c.DriveAPIURL = DefaultDriveAPIURL
 	}
@@ -78,25 +81,37 @@ func (c *Config) applyDefaults() {
 	}
 }
 
+// clientHeaderTransport wraps http.RoundTripper to automatically add the internxt-client header
+type clientHeaderTransport struct {
+	base http.RoundTripper
+}
+
+func (t *clientHeaderTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.Header.Set("internxt-client", ClientName)
+	return t.base.RoundTrip(req)
+}
+
 // newHTTPClient: properly configured HTTP client with sensible timeouts
 func newHTTPClient() *http.Client {
+	baseTransport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		MaxConnsPerHost:     50,
+		IdleConnTimeout:     90 * time.Second,
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 20 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		DisableKeepAlives:     false,
+		DisableCompression:    false,
+		ForceAttemptHTTP2:     true,
+	}
+
 	return &http.Client{
-		Timeout: 5 * time.Minute,
-		Transport: &http.Transport{
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 10,
-			MaxConnsPerHost:     50,
-			IdleConnTimeout:     90 * time.Second,
-			DialContext: (&net.Dialer{
-				Timeout:   10 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).DialContext,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ResponseHeaderTimeout: 20 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
-			DisableKeepAlives:     false,
-			DisableCompression:    false,
-			ForceAttemptHTTP2:     true,
-		},
+		Timeout:   5 * time.Minute,
+		Transport: &clientHeaderTransport{base: baseTransport},
 	}
 }

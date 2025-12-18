@@ -16,15 +16,11 @@ import (
 	"testing"
 
 	"github.com/internxt/rclone-adapter/config"
-	"github.com/internxt/rclone-adapter/endpoints"
 )
 
 // TestNewMultipartUploadState tests the initialization of multipart upload state
 func TestNewMultipartUploadState(t *testing.T) {
-	cfg := &config.Config{
-		Mnemonic: TestMnemonic,
-		Bucket:   TestBucket6,
-	}
+	cfg := newTestConfigWithBucket(TestBucket6)
 
 	testCases := []struct {
 		name      string
@@ -102,11 +98,7 @@ func TestNewMultipartUploadState(t *testing.T) {
 
 // TestEncryptedChunkPipeline tests the encryption pipeline
 func TestEncryptedChunkPipeline(t *testing.T) {
-	cfg := &config.Config{
-		Mnemonic:   TestMnemonic,
-		Bucket:     TestBucket6,
-		HTTPClient: &http.Client{},
-	}
+	cfg := newTestConfigWithBucket(TestBucket6)
 
 	testData := bytes.Repeat([]byte("test data pattern "), 5*1024*1024) // ~90 MB
 	fileSize := int64(len(testData))
@@ -275,11 +267,7 @@ func TestRetryableErrorDetection(t *testing.T) {
 
 // TestChunkRetryLogic tests that failed uploads are retried
 func TestChunkRetryLogic(t *testing.T) {
-	cfg := &config.Config{
-		Mnemonic:   TestMnemonic,
-		Bucket:     TestBucket6,
-		HTTPClient: &http.Client{},
-	}
+	cfg := newTestConfigWithBucket(TestBucket6)
 
 	state, err := newMultipartUploadState(cfg, 100*1024*1024)
 	if err != nil {
@@ -326,11 +314,7 @@ func TestChunkRetryLogic(t *testing.T) {
 
 // TestChunkRetryExhaustion tests that non-retryable errors fail immediately
 func TestChunkRetryExhaustion(t *testing.T) {
-	cfg := &config.Config{
-		Mnemonic:   TestMnemonic,
-		Bucket:     TestBucket6,
-		HTTPClient: &http.Client{},
-	}
+	cfg := newTestConfigWithBucket(TestBucket6)
 
 	state, err := newMultipartUploadState(cfg, 100*1024*1024)
 	if err != nil {
@@ -397,11 +381,7 @@ func TestContainsHelper(t *testing.T) {
 
 // TestMultipartUploadContextCancellation tests context cancellation during upload
 func TestMultipartUploadContextCancellation(t *testing.T) {
-	cfg := &config.Config{
-		Mnemonic:   TestMnemonic,
-		Bucket:     TestBucket1,
-		HTTPClient: &http.Client{},
-	}
+	cfg := newTestConfigWithBucket(TestBucket1)
 
 	largeContent := make([]byte, config.DefaultChunkSize*2)
 	for i := range largeContent {
@@ -433,7 +413,7 @@ func TestMultipartUploadContextCancellation(t *testing.T) {
 	defer mockServer.Close()
 	serverURL = mockServer.URL
 
-	cfg.Endpoints = endpoints.NewConfig(serverURL)
+	setEndpoints(cfg, serverURL)
 
 	state, err := newMultipartUploadState(cfg, int64(len(largeContent)))
 	if err != nil {
@@ -451,11 +431,7 @@ func TestMultipartUploadContextCancellation(t *testing.T) {
 
 // TestEncryptAndUploadPipelinedError tests error handling in the pipeline
 func TestEncryptAndUploadPipelinedError(t *testing.T) {
-	cfg := &config.Config{
-		Mnemonic:   TestMnemonic,
-		Bucket:     TestBucket2,
-		HTTPClient: &http.Client{},
-	}
+	cfg := newTestConfigWithBucket(TestBucket2)
 
 	testData := make([]byte, config.DefaultChunkSize*2)
 	state, _ := newMultipartUploadState(cfg, int64(len(testData)))
@@ -494,11 +470,7 @@ func TestEncryptAndUploadPipelinedError(t *testing.T) {
 
 // TestExecuteMultipartUploadWrongURLCount tests handling of incorrect URL count
 func TestExecuteMultipartUploadWrongURLCount(t *testing.T) {
-	cfg := &config.Config{
-		Mnemonic:   TestMnemonic,
-		Bucket:     TestBucket3,
-		HTTPClient: &http.Client{},
-	}
+	cfg := newTestConfigWithBucket(TestBucket3)
 
 	testData := make([]byte, config.DefaultChunkSize*3)
 	state, _ := newMultipartUploadState(cfg, int64(len(testData)))
@@ -516,7 +488,7 @@ func TestExecuteMultipartUploadWrongURLCount(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	cfg.Endpoints = endpoints.NewConfig(mockServer.URL)
+	setEndpoints(cfg, mockServer.URL)
 
 	reader := bytes.NewReader(testData)
 	_, err := state.executeMultipartUpload(context.Background(), reader)
@@ -531,11 +503,7 @@ func TestExecuteMultipartUploadWrongURLCount(t *testing.T) {
 
 // TestExecuteMultipartUploadWrongUploadCount tests handling of incorrect upload count
 func TestExecuteMultipartUploadWrongUploadCount(t *testing.T) {
-	cfg := &config.Config{
-		Mnemonic:   TestMnemonic,
-		Bucket:     TestBucket4,
-		HTTPClient: &http.Client{},
-	}
+	cfg := newTestConfigWithBucket(TestBucket4)
 
 	testData := make([]byte, config.DefaultChunkSize*2)
 	state, _ := newMultipartUploadState(cfg, int64(len(testData)))
@@ -549,7 +517,7 @@ func TestExecuteMultipartUploadWrongUploadCount(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	cfg.Endpoints = endpoints.NewConfig(mockServer.URL)
+	setEndpoints(cfg, mockServer.URL)
 
 	reader := bytes.NewReader(testData)
 	_, err := state.executeMultipartUpload(context.Background(), reader)
