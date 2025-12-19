@@ -15,6 +15,15 @@ import (
 	"github.com/internxt/rclone-adapter/config"
 )
 
+// chunkBufferPool reuses memory buffers for chunk encryption to reduce GC pressure
+// Uses sync.Pool without pre-allocation - buffers are only created when actually needed
+var chunkBufferPool = sync.Pool{
+	New: func() any {
+		// Return nil - allocate on-demand
+		return nil
+	},
+}
+
 // multipartUploadState holds the state for a single multipart upload session
 type multipartUploadState struct {
 	cfg            *config.Config
@@ -34,9 +43,10 @@ type multipartUploadState struct {
 
 // encryptedChunk represents a chunk that has been encrypted and is ready for upload
 type encryptedChunk struct {
-	index int
-	data  []byte
-	err   error
+	index      int
+	data       []byte
+	err        error
+	bufferRefs []*[]byte
 }
 
 // uploadResult holds the result of a single chunk upload
@@ -150,24 +160,53 @@ func (s *multipartUploadState) encryptAndUploadPipelined(ctx context.Context, re
 				chunkSize = s.totalSize - (i * s.chunkSize)
 			}
 
-			plainChunk := make([]byte, chunkSize)
+			// Get buffers from pool or allocate at exact size needed
+			var plainBufPtr, encryptedBufPtr *[]byte
+
+			if poolBuf := chunkBufferPool.Get(); poolBuf != nil {
+				plainBufPtr = poolBuf.(*[]byte)
+				// Resize if buffer is too small
+				if int64(cap(*plainBufPtr)) < chunkSize {
+					buf := make([]byte, chunkSize)
+					plainBufPtr = &buf
+				}
+			} else {
+				buf := make([]byte, chunkSize)
+				plainBufPtr = &buf
+			}
+
+			if poolBuf := chunkBufferPool.Get(); poolBuf != nil {
+				encryptedBufPtr = poolBuf.(*[]byte)
+				if int64(cap(*encryptedBufPtr)) < chunkSize {
+					buf := make([]byte, chunkSize)
+					encryptedBufPtr = &buf
+				}
+			} else {
+				buf := make([]byte, chunkSize)
+				encryptedBufPtr = &buf
+			}
+
+			plainChunk := (*plainBufPtr)[:chunkSize]
 			n, err := io.ReadFull(reader, plainChunk)
 			if err != nil && err != io.ErrUnexpectedEOF {
+				chunkBufferPool.Put(plainBufPtr)
+				chunkBufferPool.Put(encryptedBufPtr)
 				encryptErr = fmt.Errorf("failed to read chunk %d: %w", i, err)
 				chunkChan <- encryptedChunk{index: int(i), err: encryptErr}
 				return
 			}
 			plainChunk = plainChunk[:n]
 
-			encryptedData := make([]byte, len(plainChunk))
+			encryptedData := (*encryptedBufPtr)[:len(plainChunk)]
 			s.cipher.XORKeyStream(encryptedData, plainChunk)
 
 			overallHasher.Write(encryptedData)
 
 			chunkChan <- encryptedChunk{
-				index: int(i),
-				data:  encryptedData,
-				err:   nil,
+				index:      int(i),
+				data:       encryptedData,
+				err:        nil,
+				bufferRefs: []*[]byte{plainBufPtr, encryptedBufPtr},
 			}
 		}
 	}()
@@ -175,7 +214,10 @@ func (s *multipartUploadState) encryptAndUploadPipelined(ctx context.Context, re
 	// Start upload workers
 	for chunk := range chunkChan {
 		if chunk.err != nil {
-			for range chunkChan {
+			for remaining := range chunkChan {
+				for _, bufPtr := range remaining.bufferRefs {
+					chunkBufferPool.Put(bufPtr)
+				}
 			}
 			return nil, "", chunk.err
 		}
@@ -183,6 +225,12 @@ func (s *multipartUploadState) encryptAndUploadPipelined(ctx context.Context, re
 		uploadWg.Add(1)
 		go func(ch encryptedChunk) {
 			defer uploadWg.Done()
+
+			defer func() {
+				for _, bufPtr := range ch.bufferRefs {
+					chunkBufferPool.Put(bufPtr)
+				}
+			}()
 
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
