@@ -212,3 +212,166 @@ func TestRenameFile(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckFilesExistence(t *testing.T) {
+	testCases := []struct {
+		name           string
+		folderUUID     string
+		files          []FileExistenceCheck
+		mockStatusCode int
+		mockResponse   *CheckFilesExistenceResponse
+		expectError    bool
+		errorContains  string
+	}{
+		{
+			name:       "successful check with existing files",
+			folderUUID: "test-folder-uuid",
+			files: []FileExistenceCheck{
+				{PlainName: "file1.txt", Type: "text/plain"},
+				{PlainName: "file2.jpg", Type: "image/jpeg"},
+			},
+			mockStatusCode: http.StatusOK,
+			mockResponse: &CheckFilesExistenceResponse{
+				Files: []FileExistenceResult{
+					{Exists: true, UUID: "file1-uuid", PlainName: "file1.txt", Type: "text/plain"},
+					{Exists: false, PlainName: "file2.jpg", Type: "image/jpeg"},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name:       "successful check with no files",
+			folderUUID: "test-folder-uuid",
+			files:      []FileExistenceCheck{},
+			mockStatusCode: http.StatusOK,
+			mockResponse: &CheckFilesExistenceResponse{
+				Files: []FileExistenceResult{},
+			},
+			expectError: false,
+		},
+		{
+			name:       "unauthorized - 401",
+			folderUUID: "test-folder-uuid",
+			files: []FileExistenceCheck{
+				{PlainName: "file1.txt", Type: "text/plain"},
+			},
+			mockStatusCode: http.StatusUnauthorized,
+			expectError:    true,
+			errorContains:  "401",
+		},
+		{
+			name:       "not found - 404",
+			folderUUID: "non-existent-folder",
+			files: []FileExistenceCheck{
+				{PlainName: "file1.txt", Type: "text/plain"},
+			},
+			mockStatusCode: http.StatusNotFound,
+			expectError:    true,
+			errorContains:  "404",
+		},
+		{
+			name:       "server error - 500",
+			folderUUID: "test-folder-uuid",
+			files: []FileExistenceCheck{
+				{PlainName: "file1.txt", Type: "text/plain"},
+			},
+			mockStatusCode: http.StatusInternalServerError,
+			expectError:    true,
+			errorContains:  "500",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var capturedPayload CheckFilesExistenceRequest
+
+			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != "POST" {
+					t.Errorf("expected POST request, got %s", r.Method)
+				}
+
+				authHeader := r.Header.Get("Authorization")
+				if !strings.HasPrefix(authHeader, "Bearer ") {
+					t.Error("expected Authorization header with Bearer token")
+				}
+
+				if r.Header.Get("Content-Type") != "application/json" {
+					t.Errorf("expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
+				}
+
+				if !strings.Contains(r.URL.Path, tc.folderUUID) {
+					t.Errorf("expected path to contain folder UUID %s, got %s", tc.folderUUID, r.URL.Path)
+				}
+
+				if err := json.NewDecoder(r.Body).Decode(&capturedPayload); err != nil {
+					t.Errorf("failed to decode request body: %v", err)
+				}
+
+				w.WriteHeader(tc.mockStatusCode)
+				if tc.mockStatusCode == http.StatusOK {
+					if tc.mockResponse != nil {
+						json.NewEncoder(w).Encode(tc.mockResponse)
+					}
+				} else {
+					w.Write([]byte("error message"))
+				}
+			}))
+			defer mockServer.Close()
+
+			cfg := newTestConfig(mockServer.URL)
+
+			result, err := CheckFilesExistence(context.Background(), cfg, tc.folderUUID, tc.files)
+
+			if tc.expectError {
+				if err == nil {
+					t.Error("expected error, got nil")
+				}
+				if tc.errorContains != "" && !strings.Contains(err.Error(), tc.errorContains) {
+					t.Errorf("expected error to contain %q, got %q", tc.errorContains, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+
+				if len(capturedPayload.Files) != len(tc.files) {
+					t.Errorf("expected %d files in request, got %d", len(tc.files), len(capturedPayload.Files))
+				}
+
+				for i, file := range tc.files {
+					if i < len(capturedPayload.Files) {
+						if capturedPayload.Files[i].PlainName != file.PlainName {
+							t.Errorf("expected file %d plainName %s, got %s", i, file.PlainName, capturedPayload.Files[i].PlainName)
+						}
+						if capturedPayload.Files[i].Type != file.Type {
+							t.Errorf("expected file %d type %s, got %s", i, file.Type, capturedPayload.Files[i].Type)
+						}
+					}
+				}
+
+				if result == nil {
+					t.Fatal("expected result, got nil")
+				}
+
+				if len(result.Files) != len(tc.mockResponse.Files) {
+					t.Errorf("expected %d files in response, got %d", len(tc.mockResponse.Files), len(result.Files))
+				}
+
+				for i, expected := range tc.mockResponse.Files {
+					if i < len(result.Files) {
+						actual := result.Files[i]
+						if actual.Exists != expected.Exists {
+							t.Errorf("expected file %d exists=%v, got %v", i, expected.Exists, actual.Exists)
+						}
+						if actual.PlainName != expected.PlainName {
+							t.Errorf("expected file %d plainName %s, got %s", i, expected.PlainName, actual.PlainName)
+						}
+						if actual.UUID != expected.UUID {
+							t.Errorf("expected file %d UUID %s, got %s", i, expected.UUID, actual.UUID)
+						}
+					}
+				}
+			}
+		})
+	}
+}

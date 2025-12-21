@@ -135,6 +135,11 @@ func (f *FolderEndpoints) ContentFiles(parentUUID string) string {
 	return u
 }
 
+func (f *FolderEndpoints) CheckFilesExistence(parentUUID string) string {
+	u, _ := url.JoinPath(f.base, "/content", parentUUID, "/files", "/existence")
+	return u
+}
+
 // UserEndpoints : endpoints under /users
 type UserEndpoints struct {
 	base string
