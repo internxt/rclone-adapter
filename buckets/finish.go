@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/internxt/rclone-adapter/config"
 )
@@ -70,9 +69,6 @@ func FinishUpload(ctx context.Context, cfg *config.Config, bucketID, index strin
 	bodyStr := string(bodyBytes)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if resp.StatusCode == 500 && strings.Contains(bodyStr, "duplicate key error") {
-			return nil, fmt.Errorf("file already exists on server (duplicate shard): %s", bodyStr)
-		}
 		return nil, fmt.Errorf("finish upload failed: status %d, %s", resp.StatusCode, bodyStr)
 	}
 
@@ -113,9 +109,6 @@ func FinishMultipartUpload(ctx context.Context, cfg *config.Config, bucketID, in
 	bodyStr := string(bodyBytes)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		if resp.StatusCode == 500 && strings.Contains(bodyStr, "duplicate key error") {
-			return nil, fmt.Errorf("file already exists on server (duplicate shard): %s", bodyStr)
-		}
 		return nil, fmt.Errorf("finish multipart upload failed: status %d, %s", resp.StatusCode, bodyStr)
 	}
 
