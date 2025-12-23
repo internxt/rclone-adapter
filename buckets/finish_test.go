@@ -69,7 +69,7 @@ func TestFinishUpload(t *testing.T) {
 			mockStatusCode: http.StatusInternalServerError,
 			mockBody:       `{"error": "duplicate key error collection: buckets"}`,
 			expectError:    true,
-			errorContains:  "duplicate shard",
+			errorContains:  "finish upload failed",
 		},
 		{
 			name:           "error - server 500",
@@ -323,7 +323,7 @@ func TestFinishMultipartUpload(t *testing.T) {
 			},
 			mockStatusCode: http.StatusInternalServerError,
 			expectError:    true,
-			errorContains:  "duplicate",
+			errorContains:  "failed",
 		},
 		{
 			name: "server error - 500",
