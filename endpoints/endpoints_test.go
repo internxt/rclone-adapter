@@ -24,6 +24,7 @@ func TestEndpointConstruction(t *testing.T) {
 		{"Network FileInfo", cfg.Network().FileInfo("bucket-123", "file-456"), "https://gateway.internxt.com/network/buckets/bucket-123/files/file-456/info"},
 		{"Network StartUpload", cfg.Network().StartUpload("bucket-123"), "https://gateway.internxt.com/network/v2/buckets/bucket-123/files/start"},
 		{"Network FinishUpload", cfg.Network().FinishUpload("bucket-123"), "https://gateway.internxt.com/network/v2/buckets/bucket-123/files/finish"},
+		{"File Check Files Existence", cfg.Drive().Folders().CheckFilesExistence("parent-uuid"), "https://gateway.internxt.com/drive/folders/content/parent-uuid/files/existence"},
 	}
 
 	for _, tt := range tests {
