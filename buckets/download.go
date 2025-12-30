@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/internxt/rclone-adapter/config"
+	"github.com/internxt/rclone-adapter/errors"
 )
 
 // ShardInfo mirrors the per‑shard info returned by /files/{fileID}/info
@@ -50,9 +51,9 @@ func GetBucketFileInfo(ctx context.Context, cfg *config.Config, bucketID, fileID
 		return nil, fmt.Errorf("failed to execute get bucket file info request: %w", err)
 	}
 	defer resp.Body.Close()
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("file info fetch failed: %d %s", resp.StatusCode, string(body))
+		return nil, errors.NewHTTPError(resp, "get bucket file info")
 	}
 
 	var info BucketFileInfo
@@ -90,9 +91,9 @@ func DownloadFile(ctx context.Context, cfg *config.Config, fileID, destPath stri
 		return fmt.Errorf("failed to execute download request: %w", err)
 	}
 	defer resp.Body.Close()
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("shard download failed: %d %s", resp.StatusCode, string(body))
+		return errors.NewHTTPError(resp, "shard download")
 	}
 
 	// 4) Set up hash computation for encrypted data stream
@@ -211,10 +212,11 @@ func DownloadFileStream(ctx context.Context, cfg *config.Config, fileUUID string
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute download stream request: %w", err)
 	}
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
+		httpErr := errors.NewHTTPError(resp, "shard download stream")
 		resp.Body.Close()
-		return nil, fmt.Errorf("shard download failed: %d %s", resp.StatusCode, string(body))
+		return nil, httpErr
 	}
 
 	// 5) Set up hash computation for full downloads only (range requests skip validation)

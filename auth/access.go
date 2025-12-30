@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/internxt/rclone-adapter/config"
+	"github.com/internxt/rclone-adapter/errors"
 )
 
 type AccessResponse struct {
@@ -56,13 +57,13 @@ func RefreshToken(ctx context.Context, cfg *config.Config) (*AccessResponse, err
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.NewHTTPError(resp, "refresh token")
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read refresh response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("refresh token failed with status %d", resp.StatusCode)
 	}
 
 	var ar AccessResponse

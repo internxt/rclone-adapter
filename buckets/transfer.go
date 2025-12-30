@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/internxt/rclone-adapter/config"
+	"github.com/internxt/rclone-adapter/errors"
 )
 
 // TransferResult holds the result of uploading a single chunk
@@ -31,15 +32,13 @@ func Transfer(ctx context.Context, cfg *config.Config, uploadURL string, r io.Re
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("transfer failed: status %d, %s", resp.StatusCode, string(body))
+		return nil, errors.NewHTTPError(resp, "transfer")
 	}
 
 	// Extract ETag from response header
 	etag := resp.Header.Get("ETag")
 	// Strip quotes if present
 	etag = strings.Trim(etag, "\"")
-
 
 	return &TransferResult{ETag: etag}, nil
 }
