@@ -11,7 +11,6 @@ func TestEndpointConstruction(t *testing.T) {
 		expected string
 	}{
 		{"Auth Login", cfg.Drive().Auth().Login(), "https://gateway.internxt.com/drive/auth/login"},
-		{"Auth LoginAccess", cfg.Drive().Auth().LoginAccess(), "https://gateway.internxt.com/drive/auth/login/access"},
 		{"File Create", cfg.Drive().Files().Create(), "https://gateway.internxt.com/drive/files"},
 		{"File Meta", cfg.Drive().Files().Meta("test-uuid"), "https://gateway.internxt.com/drive/files/test-uuid/meta"},
 		{"File Delete", cfg.Drive().Files().Delete("test-uuid"), "https://gateway.internxt.com/drive/files/test-uuid"},

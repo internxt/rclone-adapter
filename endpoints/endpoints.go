@@ -1,10 +1,8 @@
 package endpoints
 
 import (
-	"fmt"
 	"net/url"
 	"strings"
-	
 )
 
 // Config holds the base URL configuration for all API endpoints
@@ -86,16 +84,6 @@ func (a *AuthEndpoints) Login() string {
 	return u
 }
 
-func (a *AuthEndpoints) LoginAccess() string {
-	u, _ := url.JoinPath(a.base, "/login/access")
-	return u
-}
-
-func (a *AuthEndpoints) CredentialsCorrect(hashedPassword string) string {
-	u, _ := url.JoinPath(a.base, "/are-credentials-correct")
-	return fmt.Sprintf("%s?hashedPassword=%s", u, url.QueryEscape(hashedPassword))
-}
-
 // FileEndpoints : endpoints under /drive/files
 type FileEndpoints struct {
 	base string
@@ -156,7 +144,7 @@ func (u *UserEndpoints) Limit() string {
 }
 
 func (u *UserEndpoints) Refresh() string {
-	path, _ := url.JoinPath(u.base, "/refresh")
+	path, _ := url.JoinPath(u.base, "/cli/refresh")
 	return path
 }
 
