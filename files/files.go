@@ -43,9 +43,15 @@ type FileExistenceCheck struct {
 // FileExistenceResult represents the response for existence check
 type FileExistenceResult struct {
 	Exists    bool   `json:"exists"`
+	Status    string `json:"status,omitempty"`
 	UUID      string `json:"uuid,omitempty"`
 	PlainName string `json:"plainName"`
 	Type      string `json:"type,omitempty"`
+}
+
+// FileExists returns true if the file exists based on either Exists field or Status field
+func (f *FileExistenceResult) FileExists() bool {
+	return f.Exists || f.Status == "EXISTS"
 }
 
 // CheckFilesExistenceRequest is the request payload
@@ -55,7 +61,7 @@ type CheckFilesExistenceRequest struct {
 
 // CheckFilesExistenceResponse is the response
 type CheckFilesExistenceResponse struct {
-	Files []FileExistenceResult `json:"files"`
+	Files []FileExistenceResult `json:"existentFiles"`
 }
 
 // CheckFilesExistence checks if files exist in a folder (batch operation)
@@ -81,7 +87,7 @@ func CheckFilesExistence(ctx context.Context, cfg *config.Config, folderUUID str
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		respBody, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("CheckFilesExistence failed: %d %s", resp.StatusCode, string(respBody))
 	}

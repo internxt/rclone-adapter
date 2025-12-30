@@ -91,7 +91,36 @@ func UploadFileStream(ctx context.Context, cfg *config.Config, targetFolderUUID,
 		return nil, fmt.Errorf("failed to generate file key: %w", err)
 	}
 
-	// Start the API call asynchronously to overlap with encryption setup
+	encReader, err := EncryptReader(in, fileKey, iv)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create encrypt reader: %w", err)
+	}
+
+	// Compute hash: RIPEMD-160(SHA-256(encrypted_data)) - matches web client
+	sha256Hasher := sha256.New()
+	r := io.TeeReader(encReader, sha256Hasher)
+
+	// Handle unknown size by buffering entire stream
+	var preBuf []byte
+	if plainSize < 0 {
+		fmt.Printf("[DEBUG] UploadFileStream: Unknown size, buffering entire stream...\n")
+		preBuf, err = io.ReadAll(r)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read stream (unknown size): %w", err)
+		}
+		plainSize = int64(len(preBuf))
+	} else {
+		// Pre-read a buffer to reduce transfer startup latency
+		// Use 5MB or file size, whichever is smaller
+		bufSize := min(plainSize, int64(5 * 1024 * 1024))
+		preBuf = make([]byte, bufSize)
+		preReadN, preReadErr := io.ReadFull(r, preBuf)
+		if preReadErr != nil && preReadErr != io.ErrUnexpectedEOF && preReadErr != io.EOF {
+			return nil, fmt.Errorf("failed to pre-read data: %w", preReadErr)
+		}
+		preBuf = preBuf[:preReadN]
+	}
+
 	type startResult struct {
 		resp *StartUploadResp
 		err  error
@@ -103,27 +132,6 @@ func UploadFileStream(ctx context.Context, cfg *config.Config, targetFolderUUID,
 		resp, err := StartUpload(ctx, cfg, cfg.Bucket, specs)
 		startChan <- startResult{resp: resp, err: err}
 	}()
-
-	// While StartUpload is in flight, set up encryption and pre-read data
-	encReader, err := EncryptReader(in, fileKey, iv)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create encrypt reader: %w", err)
-	}
-
-	// Compute hash: RIPEMD-160(SHA-256(encrypted_data)) - matches web client
-	sha256Hasher := sha256.New()
-	r := io.TeeReader(encReader, sha256Hasher)
-
-	// Pre-read a buffer to reduce transfer startup latency
-	// Use 5MB or file size, whichever is smaller
-	bufSize := min(plainSize, int64(5 * 1024 * 1024))
-
-	preBuf := make([]byte, bufSize)
-	preReadN, preReadErr := io.ReadFull(r, preBuf)
-	if preReadErr != nil && preReadErr != io.ErrUnexpectedEOF && preReadErr != io.EOF {
-		return nil, fmt.Errorf("failed to pre-read data: %w", preReadErr)
-	}
-	preBuf = preBuf[:preReadN]
 
 	// Wait for StartUpload to complete
 	startRes := <-startChan
@@ -198,6 +206,26 @@ func UploadFileStreamMultipart(ctx context.Context, cfg *config.Config, targetFo
 
 // UploadFileStreamAuto automatically chooses between single-part and multipart upload
 func UploadFileStreamAuto(ctx context.Context, cfg *config.Config, targetFolderUUID, fileName string, in io.Reader, plainSize int64, modTime time.Time) (*CreateMetaResponse, error) {
+	const maxUnknownSizeBuffer = 1024 * 1024 * 1024 // 1GB limit
+	var bufferedData []byte
+	if plainSize < 0 {
+
+		// Use LimitReader to prevent OOM on huge streams
+		limitedReader := io.LimitReader(in, maxUnknownSizeBuffer+1)
+		var err error
+		bufferedData, err = io.ReadAll(limitedReader)
+		if err != nil {
+			return nil, fmt.Errorf("failed to buffer unknown-size stream: %w", err)
+		}
+
+		if int64(len(bufferedData)) > maxUnknownSizeBuffer {
+			return nil, fmt.Errorf("unknown-size upload exceeds %d byte limit - size must be known for files larger than 1GB", maxUnknownSizeBuffer)
+		}
+
+		plainSize = int64(len(bufferedData))
+		in = bytes.NewReader(bufferedData)
+	}
+
 	if plainSize >= config.DefaultMultipartMinSize {
 		return UploadFileStreamMultipart(ctx, cfg, targetFolderUUID, fileName, in, plainSize, modTime)
 	}
