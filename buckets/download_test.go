@@ -471,33 +471,24 @@ func TestDownloadFileStream_HashMismatch(t *testing.T) {
 	}
 }
 
-// TestDownloadFile_EmptyFile : Empty file download
+// TestDownloadFile_EmptyFile : Empty file download - verifies no S3 download is made
 func TestDownloadFile_EmptyFile(t *testing.T) {
-	plainData := []byte("")
+	downloadServerCalled := false
 
-	key, iv, _ := GenerateFileKey(TestMnemonic, TestBucket1, TestIndex)
-	encReader, _ := EncryptReader(bytes.NewReader(plainData), key, iv)
-	encData, _ := io.ReadAll(encReader)
-
-	sha256Hasher := sha256.New()
-	sha256Hasher.Write(encData)
-	expectedHash := ComputeFileHash(sha256Hasher.Sum(nil))
-
-	var infoServer, downloadServer *httptest.Server
-
-	downloadServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	downloadServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		downloadServerCalled = true
+		t.Error("download server should not be called for empty files")
 		w.WriteHeader(http.StatusOK)
-		w.Write(encData)
 	}))
 	defer downloadServer.Close()
 
-	infoServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		resp := BucketFileInfo{
 			Bucket: TestBucket1,
 			Index:  testIndex,
 			Size:   0,
 			ID:     testFileUUID,
-			Shards: []ShardInfo{{Index: 0, Hash: expectedHash, URL: downloadServer.URL + "/shard"}},
+			Shards: []ShardInfo{{Index: 0, Hash: "", URL: downloadServer.URL + "/shard"}},
 		}
 		json.NewEncoder(w).Encode(resp)
 	}))
@@ -525,6 +516,10 @@ func TestDownloadFile_EmptyFile(t *testing.T) {
 
 	if len(downloaded) != 0 {
 		t.Errorf("expected empty file, got %d bytes", len(downloaded))
+	}
+
+	if downloadServerCalled {
+		t.Error("download server was called but should have been skipped for empty file")
 	}
 }
 
@@ -634,6 +629,7 @@ func TestDownloadFile(t *testing.T) {
 		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
 				Index: plainIndex,
+				Size:  100,
 				Shards: []ShardInfo{
 					{Index: 0, Hash: hash, URL: ""},
 				},
@@ -652,6 +648,7 @@ func TestDownloadFile(t *testing.T) {
 		infoServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
 				Index: plainIndex,
+				Size:  int64(len(testData)),
 				Shards: []ShardInfo{
 					{Index: 0, Hash: hash, URL: shardServer.URL},
 				},
@@ -688,6 +685,7 @@ func TestDownloadFile(t *testing.T) {
 		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
 				Index:  TestIndex,
+				Size:  100,
 				Shards: []ShardInfo{},
 			}
 			w.WriteHeader(http.StatusOK)
@@ -722,6 +720,7 @@ func TestDownloadFile(t *testing.T) {
 			if strings.Contains(r.URL.Path, "/info") {
 				info := BucketFileInfo{
 					Index: plainIndex,
+					Size:  100,
 					Shards: []ShardInfo{
 						{Index: 0, Hash: "hash1", URL: "http://invalid-url-that-will-fail"},
 					},
@@ -761,6 +760,7 @@ func TestDownloadFile(t *testing.T) {
 		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
 				Index: plainIndex,
+				Size:  100,
 				Shards: []ShardInfo{
 					{Index: 0, Hash: "hash1", URL: shardServer.URL},
 				},
@@ -812,6 +812,7 @@ func TestDownloadFile(t *testing.T) {
 		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
 				Index: plainIndex,
+				Size:  100,
 				Shards: []ShardInfo{
 					{Index: 0, Hash: "hash1", URL: shardServer.URL},
 				},
@@ -872,6 +873,7 @@ func TestDownloadFile(t *testing.T) {
 		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
 				Index: "invalid-hex-zzz",
+				Size:  100,
 				Shards: []ShardInfo{
 					{Index: 0, Hash: "hash1", URL: "http://test"},
 				},
@@ -1081,6 +1083,7 @@ func TestDownloadFileStream(t *testing.T) {
 		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
 				Index: plainIndex,
+				Size:  100,
 				Shards: []ShardInfo{
 					{Index: 0, Hash: "hash1", URL: shardServer.URL},
 				},
@@ -1144,6 +1147,7 @@ func TestDownloadFileStream(t *testing.T) {
 		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
 				Index: plainIndex,
+				Size:  100,
 				Shards: []ShardInfo{
 					{Index: 0, Hash: "hash1", URL: shardServer.URL},
 				},
@@ -1183,6 +1187,7 @@ func TestDownloadFileStream(t *testing.T) {
 		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
 				Index: plainIndex,
+				Size:  100,
 				Shards: []ShardInfo{
 					{Index: 0, Hash: "hash1", URL: "http://test"},
 				},
@@ -1213,6 +1218,7 @@ func TestDownloadFileStream(t *testing.T) {
 		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
 				Index:  TestIndex,
+				Size:  100,
 				Shards: []ShardInfo{},
 			}
 			w.WriteHeader(http.StatusOK)
@@ -1265,6 +1271,7 @@ func TestDownloadFileStream(t *testing.T) {
 		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
 				Index: "invalid-hex-index-zzz",
+				Size:  100,
 				Shards: []ShardInfo{
 					{Index: 0, Hash: "hash1", URL: "http://test"},
 				},
@@ -1295,6 +1302,7 @@ func TestDownloadFileStream(t *testing.T) {
 		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
 				Index: TestIndex,
+				Size:  100,
 				Shards: []ShardInfo{
 					{Index: 0, Hash: "hash1", URL: "http://invalid-host-that-does-not-exist-12345.local"},
 				},
@@ -1331,6 +1339,7 @@ func TestDownloadFileStream(t *testing.T) {
 		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
 				Index: TestIndex,
+				Size:  100,
 				Shards: []ShardInfo{
 					{Index: 0, Hash: "hash1", URL: shardServer.URL},
 				},
@@ -1370,6 +1379,7 @@ func TestDownloadFileStream(t *testing.T) {
 		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
 				Index: "bad-index-short",
+				Size:  100,
 				Shards: []ShardInfo{
 					{Index: 0, Hash: "hash1", URL: shardServer.URL},
 				},
@@ -1432,6 +1442,7 @@ func TestDownloadFileStream(t *testing.T) {
 		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
 				Index: plainIndex,
+				Size:  100,
 				Shards: []ShardInfo{
 					{Index: 0, Hash: "hash1", URL: shardServer.URL},
 				},
@@ -1509,6 +1520,7 @@ func TestDownloadFileStream(t *testing.T) {
 		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
 				Index: plainIndex,
+				Size:  100,
 				Shards: []ShardInfo{
 					{Index: 0, Hash: "hash1", URL: shardServer.URL},
 				},
@@ -1582,6 +1594,7 @@ func TestDownloadFileStream(t *testing.T) {
 		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
 				Index: plainIndex,
+				Size:  100,
 				Shards: []ShardInfo{
 					{Index: 0, Hash: "hash1", URL: shardServer.URL},
 				},
@@ -1606,6 +1619,109 @@ func TestDownloadFileStream(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "failed to discard offset bytes") {
 			t.Errorf("expected error to contain 'failed to discard offset bytes', got %v", err)
+		}
+	})
+
+	t.Run("empty file stream - verifies no S3 download", func(t *testing.T) {
+		downloadServerCalled := false
+
+		shardServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			downloadServerCalled = true
+			t.Error("shard server should not be called for empty files")
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer shardServer.Close()
+
+		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			info := BucketFileInfo{
+				Bucket: TestBucket1,
+				Index:  testIndex,
+				Size:   0,
+				ID:     testFileUUID,
+				Shards: []ShardInfo{{Index: 0, Hash: "should-not-be-used", URL: shardServer.URL}},
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(info)
+		}))
+		defer infoServer.Close()
+
+		cfg := &config.Config{
+			Mnemonic:           TestMnemonic,
+			Bucket:             TestBucket1,
+			BasicAuthHeader:    TestBasicAuth,
+			HTTPClient:         &http.Client{},
+			Endpoints:          endpoints.NewConfig(infoServer.URL),
+			SkipHashValidation: false,
+		}
+
+		stream, err := DownloadFileStream(context.Background(), cfg, testFileUUID)
+		if err != nil {
+			t.Fatalf("DownloadFileStream failed for empty file: %v", err)
+		}
+		defer stream.Close()
+
+		data, err := io.ReadAll(stream)
+		if err != nil {
+			t.Fatalf("failed to read empty stream: %v", err)
+		}
+
+		if len(data) != 0 {
+			t.Errorf("expected empty stream, got %d bytes", len(data))
+		}
+
+		if downloadServerCalled {
+			t.Error("shard server was called but should have been skipped for empty file")
+		}
+	})
+
+	t.Run("empty file stream with range - still returns empty", func(t *testing.T) {
+		downloadServerCalled := false
+
+		shardServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			downloadServerCalled = true
+			t.Error("shard server should not be called for empty files even with range")
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer shardServer.Close()
+
+		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			info := BucketFileInfo{
+				Bucket: TestBucket1,
+				Index:  testIndex,
+				Size:   0,
+				ID:     testFileUUID,
+				Shards: []ShardInfo{{Index: 0, Hash: "unused", URL: shardServer.URL}},
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(info)
+		}))
+		defer infoServer.Close()
+
+		cfg := &config.Config{
+			Mnemonic:        TestMnemonic,
+			Bucket:          TestBucket1,
+			BasicAuthHeader: TestBasicAuth,
+			HTTPClient:      &http.Client{},
+			Endpoints:       endpoints.NewConfig(infoServer.URL),
+		}
+
+		stream, err := DownloadFileStream(context.Background(), cfg, testFileUUID, "bytes=0-99")
+		if err != nil {
+			t.Fatalf("DownloadFileStream with range failed for empty file: %v", err)
+		}
+		defer stream.Close()
+
+		data, err := io.ReadAll(stream)
+		if err != nil {
+			t.Fatalf("failed to read stream: %v", err)
+		}
+
+		if len(data) != 0 {
+			t.Errorf("expected empty stream even with range, got %d bytes", len(data))
+		}
+
+		if downloadServerCalled {
+			t.Error("shard server was called but should have been skipped")
 		}
 	})
 }
