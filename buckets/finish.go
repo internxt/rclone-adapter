@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/internxt/rclone-adapter/config"
+	"github.com/internxt/rclone-adapter/errors"
 )
 
 type Shard struct {
@@ -65,11 +66,13 @@ func FinishUpload(ctx context.Context, cfg *config.Config, bucketID, index strin
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, _ := io.ReadAll(resp.Body)
-	bodyStr := string(bodyBytes)
-
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("finish upload failed: status %d, %s", resp.StatusCode, bodyStr)
+		return nil, errors.NewHTTPError(resp, "finish upload")
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	var result FinishUploadResp
@@ -105,11 +108,13 @@ func FinishMultipartUpload(ctx context.Context, cfg *config.Config, bucketID, in
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, _ := io.ReadAll(resp.Body)
-	bodyStr := string(bodyBytes)
-
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("finish multipart upload failed: status %d, %s", resp.StatusCode, bodyStr)
+		return nil, errors.NewHTTPError(resp, "finish multipart upload")
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	var result FinishUploadResp

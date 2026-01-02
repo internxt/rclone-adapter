@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/internxt/rclone-adapter/config"
+	"github.com/internxt/rclone-adapter/errors"
 )
 
 // UploadPartSpec defines each part's index and size for the start call
@@ -51,9 +52,6 @@ func StartUpload(ctx context.Context, cfg *config.Config, bucketID string, parts
 	req.Header.Set("internxt-version", "1.0")
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 
-	// DEBUG: Print headers (without exposing full auth token)
-	fmt.Printf("DEBUG StartUpload: Headers set - Content-Type=%s, internxt-version=%s, internxt-client=%s\n",
-		req.Header.Get("Content-Type"), req.Header.Get("internxt-version"), req.Header.Get("internxt-client"))
 	if cfg.BasicAuthHeader != "" {
 	}
 
@@ -63,13 +61,13 @@ func StartUpload(ctx context.Context, cfg *config.Config, bucketID string, parts
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, errors.NewHTTPError(resp, "start upload")
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("start upload failed: status %d, %s", resp.StatusCode, string(body))
 	}
 
 	var result StartUploadResp
@@ -104,13 +102,13 @@ func StartUploadMultipart(ctx context.Context, cfg *config.Config, bucketID stri
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, errors.NewHTTPError(resp, "start multipart upload")
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("start multipart upload failed: status %d, %s", resp.StatusCode, string(body))
 	}
 
 	var result StartUploadResp

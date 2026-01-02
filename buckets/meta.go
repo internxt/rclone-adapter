@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/internxt/rclone-adapter/config"
+	"github.com/internxt/rclone-adapter/errors"
 )
 
 type CreateMetaRequest struct {
@@ -70,10 +71,16 @@ func CreateMetaFile(ctx context.Context, cfg *config.Config, name, bucketID, fil
 		return nil, fmt.Errorf("failed to execute create meta request: %w", err)
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("create meta failed: status %d, %s", resp.StatusCode, string(body))
+		return nil, errors.NewHTTPError(resp, "create meta")
 	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
 	var result CreateMetaResponse
 	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal create meta response: %w", err)

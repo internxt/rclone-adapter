@@ -5,12 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/internxt/rclone-adapter/config"
+	"github.com/internxt/rclone-adapter/errors"
 )
 
 // FileMeta represents file metadata from GET /files/{uuid}/meta
@@ -88,8 +88,7 @@ func CheckFilesExistence(ctx context.Context, cfg *config.Config, folderUUID str
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		respBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("CheckFilesExistence failed: %d %s", resp.StatusCode, string(respBody))
+		return nil, errors.NewHTTPError(resp, "check files existence")
 	}
 
 	var result CheckFilesExistenceResponse
@@ -118,8 +117,7 @@ func DeleteFile(ctx context.Context, cfg *config.Config, uuid string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("DeleteFile failed: %d %s", resp.StatusCode, string(body))
+		return errors.NewHTTPError(resp, "delete file")
 	}
 
 	return nil
@@ -155,8 +153,7 @@ func RenameFile(ctx context.Context, cfg *config.Config, fileUUID, newPlainName,
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("RenameFile failed: %d %s", resp.StatusCode, string(respBody))
+		return errors.NewHTTPError(resp, "rename file")
 	}
 
 	return nil
@@ -177,8 +174,7 @@ func GetFileMeta(ctx context.Context, cfg *config.Config, fileUUID string) (*Fil
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("GetFileMeta failed: %d %s", resp.StatusCode, string(respBody))
+		return nil, errors.NewHTTPError(resp, "get file meta")
 	}
 
 	var result FileMeta

@@ -5,13 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 	"time"
 
 	"github.com/internxt/rclone-adapter/config"
+	"github.com/internxt/rclone-adapter/errors"
 )
 
 // CreateFolder calls the folder creation endpoint with authorization.
@@ -45,8 +45,7 @@ func CreateFolder(ctx context.Context, cfg *config.Config, reqBody CreateFolderR
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != 201 {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("CreateFolder failed: %d %s", resp.StatusCode, string(body))
+		return nil, errors.NewHTTPError(resp, "create folder")
 	}
 
 	var folder Folder
@@ -76,8 +75,7 @@ func DeleteFolder(ctx context.Context, cfg *config.Config, uuid string) error {
 
 	//Server returns 204 on success
 	if resp.StatusCode != 204 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("DeleteFolder failed: %d %s", resp.StatusCode, string(body))
+		return errors.NewHTTPError(resp, "delete folder")
 	}
 
 	return nil
@@ -128,8 +126,7 @@ func ListFolders(ctx context.Context, cfg *config.Config, parentUUID string, opt
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("ListFolders failed: %d %s", resp.StatusCode, string(body))
+		return nil, errors.NewHTTPError(resp, "list folders")
 	}
 
 	var wrapper struct {
@@ -186,8 +183,7 @@ func ListFiles(ctx context.Context, cfg *config.Config, parentUUID string, opts 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("ListFiles failed: %d %s", resp.StatusCode, string(body))
+		return nil, errors.NewHTTPError(resp, "list files")
 	}
 
 	var wrapper struct {
