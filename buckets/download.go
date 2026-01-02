@@ -1,6 +1,7 @@
 package buckets
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -70,6 +71,15 @@ func DownloadFile(ctx context.Context, cfg *config.Config, fileID, destPath stri
 	if err != nil {
 		return fmt.Errorf("failed to get bucket file info: %w", err)
 	}
+
+	if info.Size == 0 {
+		out, err := os.Create(destPath)
+		if err != nil {
+			return fmt.Errorf("failed to create empty file %s: %w", destPath, err)
+		}
+		return out.Close()
+	}
+
 	if len(info.Shards) == 0 {
 		return fmt.Errorf("no shards found for file %s", fileID)
 	}
@@ -154,6 +164,11 @@ func DownloadFileStream(ctx context.Context, cfg *config.Config, fileUUID string
 	if err != nil {
 		return nil, fmt.Errorf("failed to get bucket file info: %w", err)
 	}
+
+	if info.Size == 0 {
+		return io.NopCloser(bytes.NewReader(nil)), nil
+	}
+
 	if len(info.Shards) == 0 {
 		return nil, fmt.Errorf("no shards found for file %s", fileUUID)
 	}
