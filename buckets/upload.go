@@ -119,7 +119,7 @@ func UploadFile(ctx context.Context, cfg *config.Config, filePath, targetFolderU
 	base := filepath.Base(filePath)
 	name := strings.TrimSuffix(base, filepath.Ext(base))
 	ext := strings.TrimPrefix(filepath.Ext(base), ".")
-	meta, err := CreateMetaFile(ctx, cfg, name, cfg.Bucket, fileID, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
+	meta, err := CreateMetaFile(ctx, cfg, name, cfg.Bucket, &fileID, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file metadata: %w", err)
 	}
@@ -218,7 +218,7 @@ func UploadFileStream(ctx context.Context, cfg *config.Config, targetFolderUUID,
 	base := filepath.Base(fileName)
 	name := strings.TrimSuffix(base, filepath.Ext(base))
 	ext := strings.TrimPrefix(filepath.Ext(base), ".")
-	meta, err := CreateMetaFile(ctx, cfg, name, cfg.Bucket, finishResp.ID, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
+	meta, err := CreateMetaFile(ctx, cfg, name, cfg.Bucket, &finishResp.ID, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file metadata: %w", err)
 	}
@@ -246,7 +246,7 @@ func UploadFileStreamMultipart(ctx context.Context, cfg *config.Config, targetFo
 	base := filepath.Base(fileName)
 	name := strings.TrimSuffix(base, filepath.Ext(base))
 	ext := strings.TrimPrefix(filepath.Ext(base), ".")
-	meta, err := CreateMetaFile(ctx, cfg, name, cfg.Bucket, finishResp.ID, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
+	meta, err := CreateMetaFile(ctx, cfg, name, cfg.Bucket, &finishResp.ID, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file metadata: %w", err)
 	}
@@ -274,6 +274,17 @@ func UploadFileStreamAuto(ctx context.Context, cfg *config.Config, targetFolderU
 
 		plainSize = int64(len(bufferedData))
 		in = bytes.NewReader(bufferedData)
+	}
+
+	if plainSize == 0 {
+		base := filepath.Base(fileName)
+		name := strings.TrimSuffix(base, filepath.Ext(base))
+		ext := strings.TrimPrefix(filepath.Ext(base), ".")
+		meta, err := CreateMetaFile(ctx, cfg, name, cfg.Bucket, nil, "03-aes", targetFolderUUID, name, ext, 0, modTime)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create empty file metadata: %w", err)
+		}
+		return meta, nil
 	}
 
 	var capturedData *bytes.Buffer
