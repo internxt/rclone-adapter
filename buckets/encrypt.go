@@ -59,6 +59,9 @@ func GetFileDeterministicKey(key, data []byte) []byte {
 
 // GenerateFileBucketKey derives a bucket-level key from mnemonic and bucketID
 func GenerateFileBucketKey(mnemonic, bucketID string) ([]byte, error) {
+	if !bip39.IsMnemonicValid(mnemonic) {
+		return nil, fmt.Errorf("invalid mnemonic")
+	}
 	seed := bip39.NewSeed(mnemonic, "")
 	bucketBytes, err := hex.DecodeString(bucketID)
 	if err != nil {
@@ -69,6 +72,9 @@ func GenerateFileBucketKey(mnemonic, bucketID string) ([]byte, error) {
 
 // GenerateBucketKey generates a 64-character hexadecimal bucket key from a mnemonic and bucket ID.
 func GenerateBucketKey(mnem string, bucketID []byte) (string, error) {
+	if !bip39.IsMnemonicValid(mnem) {
+		return "", fmt.Errorf("invalid mnemonic")
+	}
 	seed := bip39.NewSeed(mnem, "")
 	deterministicKey, err := GetDeterministicKey(seed, bucketID)
 	if err != nil {
