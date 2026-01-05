@@ -16,9 +16,6 @@ func TestNewDefaultToken(t *testing.T) {
 	if cfg.Token != token {
 		t.Errorf("expected Token %s, got %s", token, cfg.Token)
 	}
-	if cfg.DriveAPIURL != DefaultDriveAPIURL {
-		t.Errorf("expected DriveAPIURL %s, got %s", DefaultDriveAPIURL, cfg.DriveAPIURL)
-	}
 	if cfg.HTTPClient == nil {
 		t.Error("expected HTTPClient to be initialized, got nil")
 	}
@@ -32,27 +29,6 @@ func TestApplyDefaults(t *testing.T) {
 		cfg := &Config{}
 		cfg.ApplyDefaults()
 
-		if cfg.DriveAPIURL != DefaultDriveAPIURL {
-			t.Errorf("expected DriveAPIURL %s, got %s", DefaultDriveAPIURL, cfg.DriveAPIURL)
-		}
-		if cfg.AuthAPIURL != DefaultAuthAPIURL {
-			t.Errorf("expected AuthAPIURL %s, got %s", DefaultAuthAPIURL, cfg.AuthAPIURL)
-		}
-		if cfg.UsersAPIURL != DefaultUsersAPIURL {
-			t.Errorf("expected UsersAPIURL %s, got %s", DefaultUsersAPIURL, cfg.UsersAPIURL)
-		}
-		if cfg.AppCryptoSecret != DefaultAppCryptoSecret {
-			t.Errorf("expected AppCryptoSecret %s, got %s", DefaultAppCryptoSecret, cfg.AppCryptoSecret)
-		}
-		if cfg.AppCryptoSecret2 != DefaultAppCryptoSecret2 {
-			t.Errorf("expected AppCryptoSecret2 %s, got %s", DefaultAppCryptoSecret2, cfg.AppCryptoSecret2)
-		}
-		if cfg.AppMagicIV != DefaultAppMagicIV {
-			t.Errorf("expected AppMagicIV %s, got %s", DefaultAppMagicIV, cfg.AppMagicIV)
-		}
-		if cfg.AppMagicSalt != DefaultAppMagicSalt {
-			t.Errorf("expected AppMagicSalt %s, got %s", DefaultAppMagicSalt, cfg.AppMagicSalt)
-		}
 		if cfg.HTTPClient == nil {
 			t.Error("expected HTTPClient to be initialized, got nil")
 		}
@@ -62,42 +38,20 @@ func TestApplyDefaults(t *testing.T) {
 	})
 
 	t.Run("preserves existing values", func(t *testing.T) {
-		customDriveURL := "https://custom.drive.url"
-		customAuthURL := "https://custom.auth.url"
-		customSecret := "custom-secret"
 		customClient := &http.Client{Timeout: 1 * time.Second}
 		customEndpoints := endpoints.NewConfig("https://custom.base.url")
 
 		cfg := &Config{
-			DriveAPIURL:     customDriveURL,
-			AuthAPIURL:      customAuthURL,
-			AppCryptoSecret: customSecret,
-			HTTPClient:      customClient,
-			Endpoints:       customEndpoints,
+			HTTPClient: customClient,
+			Endpoints:  customEndpoints,
 		}
 		cfg.ApplyDefaults()
 
-		if cfg.DriveAPIURL != customDriveURL {
-			t.Errorf("expected DriveAPIURL to be preserved as %s, got %s", customDriveURL, cfg.DriveAPIURL)
-		}
-		if cfg.AuthAPIURL != customAuthURL {
-			t.Errorf("expected AuthAPIURL to be preserved as %s, got %s", customAuthURL, cfg.AuthAPIURL)
-		}
-		if cfg.AppCryptoSecret != customSecret {
-			t.Errorf("expected AppCryptoSecret to be preserved as %s, got %s", customSecret, cfg.AppCryptoSecret)
-		}
 		if cfg.HTTPClient != customClient {
 			t.Error("expected HTTPClient to be preserved, got different instance")
 		}
 		if cfg.Endpoints != customEndpoints {
 			t.Error("expected Endpoints to be preserved, got different instance")
-		}
-
-		if cfg.UsersAPIURL != DefaultUsersAPIURL {
-			t.Errorf("expected UsersAPIURL %s, got %s", DefaultUsersAPIURL, cfg.UsersAPIURL)
-		}
-		if cfg.AppCryptoSecret2 != DefaultAppCryptoSecret2 {
-			t.Errorf("expected AppCryptoSecret2 %s, got %s", DefaultAppCryptoSecret2, cfg.AppCryptoSecret2)
 		}
 	})
 }
