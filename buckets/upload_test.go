@@ -559,7 +559,6 @@ func TestUploadFileInvalidMnemonic(t *testing.T) {
 	testFilePath := filepath.Join(tmpDir, "test.txt")
 	os.WriteFile(testFilePath, []byte("test"), 0644)
 
-	// BIP39 doesn't reject "invalid" mnemonics so this won't error
 	cfg := newTestConfigWithSetup("http://localhost", func(c *config.Config) {
 		c.Mnemonic = "invalid mnemonic phrase that is not standard"
 		c.Bucket = TestBucket5
@@ -567,11 +566,10 @@ func TestUploadFileInvalidMnemonic(t *testing.T) {
 
 	_, err := UploadFile(context.Background(), cfg, testFilePath, TestFolderUUID, time.Now())
 	if err == nil {
-		t.Error("expected error due to no server, got nil")
+		t.Error("expected error due to invalid mnemonic, got nil")
 	}
-	// Will fail at network request since localhost:80 is not available
-	if !strings.Contains(err.Error(), "failed to start upload") && !strings.Contains(err.Error(), "HTTP request failed") {
-		t.Errorf("expected network error, got: %v", err)
+	if !strings.Contains(err.Error(), "invalid mnemonic") {
+		t.Errorf("expected invalid mnemonic error, got: %v", err)
 	}
 }
 
