@@ -13,6 +13,7 @@ import (
 )
 
 func TestCreateMetaFile(t *testing.T) {
+	fileID := TestFileID
 	testCases := []struct {
 		name           string
 		request        CreateMetaRequest
@@ -26,7 +27,7 @@ func TestCreateMetaFile(t *testing.T) {
 			request: CreateMetaRequest{
 				Name:             TestFileNameNoExt,
 				Bucket:           TestBucket1,
-				FileID:           TestFileID,
+				FileID:           &fileID,
 				EncryptVersion:   "03-aes",
 				FolderUuid:       TestFolderUUID,
 				Size:             1024,
@@ -55,7 +56,7 @@ func TestCreateMetaFile(t *testing.T) {
 			request: CreateMetaRequest{
 				Name:             TestFileNameNoExt,
 				Bucket:           TestBucket1,
-				FileID:           TestFileID,
+				FileID:           &fileID,
 				EncryptVersion:   "03-aes",
 				FolderUuid:       TestFolderUUID,
 				Size:             1024,
@@ -74,7 +75,7 @@ func TestCreateMetaFile(t *testing.T) {
 			request: CreateMetaRequest{
 				Name:             TestFileNameNoExt,
 				Bucket:           TestBucket1,
-				FileID:           TestFileID,
+				FileID:           &fileID,
 				EncryptVersion:   "03-aes",
 				FolderUuid:       TestFolderUUID,
 				Size:             1024,
@@ -177,12 +178,13 @@ func TestCreateMetaFileInvalidJSON(t *testing.T) {
 
 	cfg := newTestConfig(mockServer.URL)
 
+	fileID := TestFileID2
 	_, err := CreateMetaFile(
 		context.Background(),
 		cfg,
 		TestFileNameNoExt,
 		TestBucket1,
-		TestFileID2,
+		&fileID,
 		"03-aes",
 		TestFolderUUID,
 		TestFileNameNoExt,

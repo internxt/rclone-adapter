@@ -16,7 +16,7 @@ import (
 type CreateMetaRequest struct {
 	Name             string    `json:"name"`
 	Bucket           string    `json:"bucket"`
-	FileID           string    `json:"fileId"`
+	FileID           *string   `json:"fileId,omitempty"`
 	EncryptVersion   string    `json:"encryptVersion"`
 	FolderUuid       string    `json:"folderUuid"`
 	Size             int64     `json:"size"`
@@ -40,7 +40,7 @@ type CreateMetaResponse struct {
 	Created        string      `json:"created"`
 }
 
-func CreateMetaFile(ctx context.Context, cfg *config.Config, name, bucketID, fileID, encryptVersion, folderUuid, plainName, fileType string, size int64, modTime time.Time) (*CreateMetaResponse, error) {
+func CreateMetaFile(ctx context.Context, cfg *config.Config, name, bucketID string, fileID *string, encryptVersion, folderUuid, plainName, fileType string, size int64, modTime time.Time) (*CreateMetaResponse, error) {
 	url := cfg.Endpoints.Drive().Files().Create()
 	reqBody := CreateMetaRequest{
 		Name:             name,
