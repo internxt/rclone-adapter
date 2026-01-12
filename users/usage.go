@@ -16,12 +16,12 @@ func GetUsage(ctx context.Context, client *schema.Client) (*schema.GetUserUsageD
 
 	parsed, err := schema.ParseUserControllerGetUserUsageResponse(resp)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse get usage response: %w", err)
+		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	if parsed.JSON200 != nil {
 		return parsed.JSON200, nil
 	}
 
-	return nil, fmt.Errorf("unexpected get usage response status: %d", resp.StatusCode)
+	return nil, fmt.Errorf("unexpected response status: %d", resp.StatusCode)
 }

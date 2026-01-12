@@ -85,6 +85,11 @@ type FileDto struct {
 // FileDtoStatus defines model for FileDto.Status.
 type FileDtoStatus string
 
+// GetUserLimitDto defines model for GetUserLimitDto.
+type GetUserLimitDto struct {
+	MaxSpaceBytes float32 `json:"maxSpaceBytes"`
+}
+
 // GetUserUsageDto defines model for GetUserUsageDto.
 type GetUserUsageDto struct {
 	Backup float32 `json:"backup"`
@@ -173,6 +178,9 @@ type ClientInterface interface {
 
 	FileControllerCreateFile(ctx context.Context, body FileControllerCreateFileJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// UserControllerLimit request
+	UserControllerLimit(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// UserControllerGetUserUsage request
 	UserControllerGetUserUsage(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
@@ -191,6 +199,18 @@ func (c *Client) FileControllerCreateFileWithBody(ctx context.Context, contentTy
 
 func (c *Client) FileControllerCreateFile(ctx context.Context, body FileControllerCreateFileJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewFileControllerCreateFileRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UserControllerLimit(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUserControllerLimitRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -249,6 +269,33 @@ func NewFileControllerCreateFileRequestWithBody(server string, contentType strin
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewUserControllerLimitRequest generates requests for UserControllerLimit
+func NewUserControllerLimitRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/users/limit")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -328,6 +375,9 @@ type ClientWithResponsesInterface interface {
 
 	FileControllerCreateFileWithResponse(ctx context.Context, body FileControllerCreateFileJSONRequestBody, reqEditors ...RequestEditorFn) (*FileControllerCreateFileResponse, error)
 
+	// UserControllerLimitWithResponse request
+	UserControllerLimitWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*UserControllerLimitResponse, error)
+
 	// UserControllerGetUserUsageWithResponse request
 	UserControllerGetUserUsageWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*UserControllerGetUserUsageResponse, error)
 }
@@ -348,6 +398,28 @@ func (r FileControllerCreateFileResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r FileControllerCreateFileResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type UserControllerLimitResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *GetUserLimitDto
+}
+
+// Status returns HTTPResponse.Status
+func (r UserControllerLimitResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UserControllerLimitResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -393,6 +465,15 @@ func (c *ClientWithResponses) FileControllerCreateFileWithResponse(ctx context.C
 	return ParseFileControllerCreateFileResponse(rsp)
 }
 
+// UserControllerLimitWithResponse request returning *UserControllerLimitResponse
+func (c *ClientWithResponses) UserControllerLimitWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*UserControllerLimitResponse, error) {
+	rsp, err := c.UserControllerLimit(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUserControllerLimitResponse(rsp)
+}
+
 // UserControllerGetUserUsageWithResponse request returning *UserControllerGetUserUsageResponse
 func (c *ClientWithResponses) UserControllerGetUserUsageWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*UserControllerGetUserUsageResponse, error) {
 	rsp, err := c.UserControllerGetUserUsage(ctx, reqEditors...)
@@ -418,6 +499,32 @@ func ParseFileControllerCreateFileResponse(rsp *http.Response) (*FileControllerC
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest FileDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUserControllerLimitResponse parses an HTTP response from a UserControllerLimitWithResponse call
+func ParseUserControllerLimitResponse(rsp *http.Response) (*UserControllerLimitResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UserControllerLimitResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest GetUserLimitDto
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
