@@ -6,14 +6,18 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/internxt/rclone-adapter/config"
+	"github.com/internxt/rclone-adapter/errors"
+	"github.com/internxt/rclone-adapter/thumbnails"
 )
 
 func UploadFile(ctx context.Context, cfg *config.Config, filePath, targetFolderUUID string, modTime time.Time) (*CreateMetaResponse, error) {
@@ -226,8 +230,97 @@ func UploadFileStreamAuto(ctx context.Context, cfg *config.Config, targetFolderU
 		in = bytes.NewReader(bufferedData)
 	}
 
-	if plainSize >= config.DefaultMultipartMinSize {
-		return UploadFileStreamMultipart(ctx, cfg, targetFolderUUID, fileName, in, plainSize, modTime)
+	var capturedData *bytes.Buffer
+	var capturedReader io.Reader = in
+
+	ext := strings.TrimPrefix(filepath.Ext(fileName), ".")
+	if thumbnails.IsSupportedFormat(ext) && plainSize > 0 && plainSize <= config.MaxThumbnailSourceSize {
+		capturedData = &bytes.Buffer{}
+		capturedReader = io.TeeReader(in, capturedData)
 	}
-	return UploadFileStream(ctx, cfg, targetFolderUUID, fileName, in, plainSize, modTime)
+
+	var meta *CreateMetaResponse
+	var err error
+	if plainSize >= config.DefaultMultipartMinSize {
+		meta, err = UploadFileStreamMultipart(ctx, cfg, targetFolderUUID, fileName, capturedReader, plainSize, modTime)
+	} else {
+		meta, err = UploadFileStream(ctx, cfg, targetFolderUUID, fileName, capturedReader, plainSize, modTime)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	if capturedData != nil && capturedData.Len() > 0 {
+		go uploadThumbnailAsync(ctx, cfg, meta.UUID, ext, capturedData.Bytes())
+	}
+
+	return meta, nil
+}
+
+// uploadThumbnailAsync handles thumbnail upload in a background goroutine
+func uploadThumbnailAsync(ctx context.Context, cfg *config.Config, fileUUID, fileType string, originalData []byte) {
+	bgCtx := context.Background()
+
+	if err := uploadThumbnail(bgCtx, cfg, fileUUID, fileType, originalData); err != nil {
+		fmt.Printf("[WARN] Thumbnail upload failed for %s: %v\n", fileUUID, err)
+	}
+}
+
+// uploadThumbnail generates and uploads a thumbnail for the given file
+func uploadThumbnail(ctx context.Context, cfg *config.Config, fileUUID, fileType string, originalData []byte) error {
+	thumbReader, thumbSize, thumbCfg, err := thumbnails.GenerateAndPrepare(fileType, originalData)
+	if err != nil {
+		return fmt.Errorf("failed to generate thumbnail: %w", err)
+	}
+
+	thumbFileName := fmt.Sprintf("thumb_%s.png", fileUUID)
+	meta, err := UploadFileStream(ctx, cfg, cfg.RootFolderID, thumbFileName, thumbReader, thumbSize, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to upload thumbnail file: %w", err)
+	}
+
+	req := thumbnails.CreateThumbnailMetadata(
+		fileUUID,
+		meta.Bucket,
+		meta.FileID,
+		meta.EncryptVersion,
+		thumbSize,
+		thumbCfg,
+	)
+
+	if err := createThumbnailAPI(ctx, cfg, req); err != nil {
+		return fmt.Errorf("failed to register thumbnail: %w", err)
+	}
+
+	return nil
+}
+
+// createThumbnailAPI registers a thumbnail via POST /drive/files/thumbnail
+func createThumbnailAPI(ctx context.Context, cfg *config.Config, req thumbnails.CreateThumbnailRequest) error {
+	endpoint := cfg.Endpoints.Drive().Files().Thumbnail()
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("failed to marshal thumbnail request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create thumbnail request: %w", err)
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+cfg.Token)
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := cfg.HTTPClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("failed to execute thumbnail request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return errors.NewHTTPError(resp, "create thumbnail")
+	}
+
+	return nil
 }

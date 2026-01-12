@@ -101,6 +101,11 @@ func (f *FileEndpoints) Delete(uuid string) string {
 	return u
 }
 
+func (f *FileEndpoints) Thumbnail() string {
+	u, _ := url.JoinPath(f.base, "/thumbnail")
+	return u
+}
+
 // FolderEndpoints : endpoints under /drive/folders
 type FolderEndpoints struct {
 	base string
