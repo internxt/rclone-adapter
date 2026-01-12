@@ -7,19 +7,21 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/internxt/rclone-adapter/schema"
 )
 
 func TestGetUsage(t *testing.T) {
 	testCases := []struct {
 		name           string
-		mockResponse   UsageResponse
+		mockResponse   schema.GetUserUsageDto
 		mockStatusCode int
 		expectError    bool
 		errorContains  string
 	}{
 		{
 			name: "successful usage retrieval",
-			mockResponse: UsageResponse{
+			mockResponse: schema.GetUserUsageDto{
 				Drive: 1024 * 1024 * 1024, // 1 GB
 			},
 			mockStatusCode: http.StatusOK,
@@ -27,7 +29,7 @@ func TestGetUsage(t *testing.T) {
 		},
 		{
 			name: "zero usage",
-			mockResponse: UsageResponse{
+			mockResponse: schema.GetUserUsageDto{
 				Drive: 0,
 			},
 			mockStatusCode: http.StatusOK,
@@ -125,14 +127,14 @@ func TestGetUsageInvalidJSON(t *testing.T) {
 func TestGetLimit(t *testing.T) {
 	testCases := []struct {
 		name           string
-		mockResponse   LimitResponse
+		mockResponse   schema.GetUserLimitDto
 		mockStatusCode int
 		expectError    bool
 		errorContains  string
 	}{
 		{
 			name: "successful limit retrieval",
-			mockResponse: LimitResponse{
+			mockResponse: schema.GetUserLimitDto{
 				MaxSpaceBytes: 10 * 1024 * 1024 * 1024, // 10 GB
 			},
 			mockStatusCode: http.StatusOK,
@@ -140,7 +142,7 @@ func TestGetLimit(t *testing.T) {
 		},
 		{
 			name: "zero limit",
-			mockResponse: LimitResponse{
+			mockResponse: schema.GetUserLimitDto{
 				MaxSpaceBytes: 0,
 			},
 			mockStatusCode: http.StatusOK,
@@ -162,7 +164,7 @@ func TestGetLimit(t *testing.T) {
 			name:           "not found - 404",
 			mockStatusCode: http.StatusNotFound,
 			expectError:    true,
-			errorContains:  "404",	
+			errorContains:  "404",
 		},
 	}
 
