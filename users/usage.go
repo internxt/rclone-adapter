@@ -2,42 +2,26 @@ package users
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 
-	"github.com/internxt/rclone-adapter/config"
+	"github.com/internxt/rclone-adapter/schema"
 )
 
-type UsageResponse struct {
-	Drive int64 `json:"drive"`
-}
-
 // GetUsage calls GET {DRIVE_API_URL}/users/usage and returns the account's current usage in bytes.
-func GetUsage(ctx context.Context, cfg *config.Config) (*UsageResponse, error) {
-	url := cfg.Endpoints.Drive().Users().Usage()
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+func GetUsage(ctx context.Context, client *schema.Client) (*schema.GetUserUsageDto, error) {
+	resp, err := client.UserControllerGetUserUsage(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create get usage request: %w", err)
+		return nil, fmt.Errorf("failed to get usage: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+cfg.Token)
-	resp, err := cfg.HTTPClient.Do(req)
+	parsed, err := schema.ParseUserControllerGetUserUsageResponse(resp)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute get usage request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("GET %s returned %d: %s", url, resp.StatusCode, string(body))
+		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	var usage UsageResponse
-	if err := json.NewDecoder(resp.Body).Decode(&usage); err != nil {
-		return nil, fmt.Errorf("failed to decode get usage response: %w", err)
+	if parsed.JSON200 != nil {
+		return parsed.JSON200, nil
 	}
 
-	return &usage, nil
+	return nil, fmt.Errorf("unexpected response status: %d", resp.StatusCode)
 }
