@@ -96,12 +96,6 @@ func TestGetUsageInvalidJSON(t *testing.T) {
 	assert.ErrorContains(t, err, "failed to parse response")
 }
 
-func TestGetUsageHTTPClientError(t *testing.T) {
-	client, _ := schema.NewOpenapiClient("http://invalid-host-that-does-not-exist", "token")
-	_, err := GetUsage(context.Background(), client)
-	assert.ErrorContains(t, err, "no such host")
-}
-
 func TestGetLimit(t *testing.T) {
 	testCases := []struct {
 		name           string
@@ -184,6 +178,12 @@ func TestGetLimitInvalidJSON(t *testing.T) {
 	_, err := GetLimit(context.Background(), client)
 
 	assert.ErrorContains(t, err, "failed to parse response")
+}
+
+func TestGetUsageHTTPClientError(t *testing.T) {
+	client, _ := schema.NewOpenapiClient("http://invalid-host-that-does-not-exist", "token")
+	_, err := GetUsage(context.Background(), client)
+	assert.ErrorContains(t, err, "no such host")
 }
 
 func TestGetLimitHTTPClientError(t *testing.T) {
