@@ -68,7 +68,7 @@ func TestGetUsage(t *testing.T) {
 			}))
 			defer mockServer.Close()
 
-			client, _ := schema.NewInternxtClient(mockServer.URL, "token")
+			client, _ := schema.NewOpenapiClient(mockServer.URL, "token")
 			usage, err := GetUsage(context.Background(), client)
 
 			if tc.errorContains != "" {
@@ -90,14 +90,14 @@ func TestGetUsageInvalidJSON(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	client, _ := schema.NewInternxtClient(mockServer.URL, "token")
+	client, _ := schema.NewOpenapiClient(mockServer.URL, "token")
 	_, err := GetUsage(context.Background(), client)
 
 	assert.ErrorContains(t, err, "failed to parse response")
 }
 
 func TestGetUsageHTTPClientError(t *testing.T) {
-	client, _ := schema.NewInternxtClient("http://invalid-host-that-does-not-exist", "token")
+	client, _ := schema.NewOpenapiClient("http://invalid-host-that-does-not-exist", "token")
 	_, err := GetUsage(context.Background(), client)
 	assert.ErrorContains(t, err, "no such host")
 }
@@ -158,7 +158,7 @@ func TestGetLimit(t *testing.T) {
 			}))
 			defer mockServer.Close()
 
-			client, _ := schema.NewInternxtClient(mockServer.URL, "token")
+			client, _ := schema.NewOpenapiClient(mockServer.URL, "token")
 			limit, err := GetLimit(context.Background(), client)
 
 			if tc.errorContains != "" {
@@ -180,14 +180,14 @@ func TestGetLimitInvalidJSON(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	client, _ := schema.NewInternxtClient(mockServer.URL, "token")
+	client, _ := schema.NewOpenapiClient(mockServer.URL, "token")
 	_, err := GetLimit(context.Background(), client)
 
 	assert.ErrorContains(t, err, "failed to parse response")
 }
 
 func TestGetLimitHTTPClientError(t *testing.T) {
-	client, _ := schema.NewInternxtClient("http://invalid-host-that-does-not-exist", "token")
+	client, _ := schema.NewOpenapiClient("http://invalid-host-that-does-not-exist", "token")
 	_, err := GetLimit(context.Background(), client)
 	assert.ErrorContains(t, err, "no such host")
 }
