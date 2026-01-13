@@ -3,19 +3,14 @@ package schema
 import (
 	"context"
 	"net/http"
+
+	"github.com/internxt/rclone-adapter/config"
 )
 
-const (
-	BaseUrl         = "https://gateway.internxt.com/drive"
-	InternxtClient  = "rclone"
-	InternxtVersion = "1.0"
-)
-
-func NewInternxtClient(token string) (*Client, error) {
-	return NewClient(BaseUrl,
+func NewInternxtClient(baseUrl, token string) (*Client, error) {
+	return NewClient(baseUrl,
 		WithRequestEditorFn(func(ctx context.Context, req *http.Request) error {
-			req.Header.Set("internxt-client", InternxtClient)
-			req.Header.Set("internxt-version", InternxtVersion)
+			req.Header.Set("internxt-client", config.ClientName)
 			req.Header.Set("Authorization", "Bearer "+token)
 			return nil
 		}),

@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/internxt/rclone-adapter/schema"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGetUsage(t *testing.T) {
@@ -16,7 +16,6 @@ func TestGetUsage(t *testing.T) {
 		name           string
 		mockResponse   schema.GetUserUsageDto
 		mockStatusCode int
-		expectError    bool
 		errorContains  string
 	}{
 		{
@@ -25,7 +24,6 @@ func TestGetUsage(t *testing.T) {
 				Drive: 1024 * 1024 * 1024, // 1 GB
 			},
 			mockStatusCode: http.StatusOK,
-			expectError:    false,
 		},
 		{
 			name: "zero usage",
@@ -33,74 +31,52 @@ func TestGetUsage(t *testing.T) {
 				Drive: 0,
 			},
 			mockStatusCode: http.StatusOK,
-			expectError:    false,
 		},
 		{
 			name:           "unauthorized - 401",
 			mockStatusCode: http.StatusUnauthorized,
-			expectError:    true,
 			errorContains:  "401",
 		},
 		{
 			name:           "server error - 500",
 			mockStatusCode: http.StatusInternalServerError,
-			expectError:    true,
 			errorContains:  "500",
 		},
 		{
 			name:           "forbidden - 403",
 			mockStatusCode: http.StatusForbidden,
-			expectError:    true,
 			errorContains:  "403",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+
 			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != "GET" {
-					t.Errorf("expected GET request, got %s", r.Method)
-				}
+				assert.Equal(t, r.Method, "GET")
+				assert.Equal(t, r.Header.Get("Authorization"), "Bearer token")
+				assert.Contains(t, r.URL.Path, "/usage")
 
-				authHeader := r.Header.Get("Authorization")
-				if !strings.HasPrefix(authHeader, "Bearer ") {
-					t.Error("expected Authorization header with Bearer token")
-				}
-
-				if !strings.Contains(r.URL.Path, "/usage") {
-					t.Errorf("expected path to contain /usage, got %s", r.URL.Path)
-				}
-
-				w.WriteHeader(tc.mockStatusCode)
 				if tc.mockStatusCode == http.StatusOK {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(tc.mockStatusCode)
 					json.NewEncoder(w).Encode(tc.mockResponse)
 				} else {
+					w.WriteHeader(tc.mockStatusCode)
 					w.Write([]byte("error message"))
 				}
 			}))
 			defer mockServer.Close()
 
-			cfg := newTestConfig(mockServer.URL)
+			client, _ := schema.NewInternxtClient(mockServer.URL, "token")
+			usage, err := GetUsage(context.Background(), client)
 
-			usage, err := GetUsage(context.Background(), cfg)
-
-			if tc.expectError {
-				if err == nil {
-					t.Error("expected error, got nil")
-				}
-				if tc.errorContains != "" && !strings.Contains(err.Error(), tc.errorContains) {
-					t.Errorf("expected error to contain %q, got %q", tc.errorContains, err.Error())
-				}
+			if tc.errorContains != "" {
+				assert.ErrorContains(t, err, tc.errorContains)
 			} else {
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				if usage == nil {
-					t.Fatal("expected usage response, got nil")
-				}
-				if usage.Drive != tc.mockResponse.Drive {
-					t.Errorf("expected Drive %d, got %d", tc.mockResponse.Drive, usage.Drive)
-				}
+				assert.NoError(t, err)
+				assert.NotNil(t, usage)
+				assert.Equal(t, tc.mockResponse.Drive, usage.Drive)
 			}
 		})
 	}
@@ -108,20 +84,22 @@ func TestGetUsage(t *testing.T) {
 
 func TestGetUsageInvalidJSON(t *testing.T) {
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("invalid json response"))
 	}))
 	defer mockServer.Close()
 
-	cfg := newTestConfig(mockServer.URL)
+	client, _ := schema.NewInternxtClient(mockServer.URL, "token")
+	_, err := GetUsage(context.Background(), client)
 
-	_, err := GetUsage(context.Background(), cfg)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON, got nil")
-	}
-	if !strings.Contains(err.Error(), "failed to decode") {
-		t.Errorf("expected error to contain 'failed to decode', got %q", err.Error())
-	}
+	assert.ErrorContains(t, err, "failed to parse response")
+}
+
+func TestGetUsageHTTPClientError(t *testing.T) {
+	client, _ := schema.NewInternxtClient("http://invalid-host-that-does-not-exist", "token")
+	_, err := GetUsage(context.Background(), client)
+	assert.ErrorContains(t, err, "no such host")
 }
 
 func TestGetLimit(t *testing.T) {
@@ -129,7 +107,6 @@ func TestGetLimit(t *testing.T) {
 		name           string
 		mockResponse   schema.GetUserLimitDto
 		mockStatusCode int
-		expectError    bool
 		errorContains  string
 	}{
 		{
@@ -138,7 +115,6 @@ func TestGetLimit(t *testing.T) {
 				MaxSpaceBytes: 10 * 1024 * 1024 * 1024, // 10 GB
 			},
 			mockStatusCode: http.StatusOK,
-			expectError:    false,
 		},
 		{
 			name: "zero limit",
@@ -146,24 +122,20 @@ func TestGetLimit(t *testing.T) {
 				MaxSpaceBytes: 0,
 			},
 			mockStatusCode: http.StatusOK,
-			expectError:    false,
 		},
 		{
 			name:           "unauthorized - 401",
 			mockStatusCode: http.StatusUnauthorized,
-			expectError:    true,
 			errorContains:  "401",
 		},
 		{
 			name:           "server error - 500",
 			mockStatusCode: http.StatusInternalServerError,
-			expectError:    true,
 			errorContains:  "500",
 		},
 		{
 			name:           "not found - 404",
 			mockStatusCode: http.StatusNotFound,
-			expectError:    true,
 			errorContains:  "404",
 		},
 	}
@@ -171,49 +143,30 @@ func TestGetLimit(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != "GET" {
-					t.Errorf("expected GET request, got %s", r.Method)
-				}
+				assert.Equal(t, r.Method, "GET")
+				assert.Equal(t, r.Header.Get("Authorization"), "Bearer token")
+				assert.Contains(t, r.URL.Path, "/limit")
 
-				authHeader := r.Header.Get("Authorization")
-				if !strings.HasPrefix(authHeader, "Bearer ") {
-					t.Error("expected Authorization header with Bearer token")
-				}
-
-				if !strings.Contains(r.URL.Path, "/limit") {
-					t.Errorf("expected path to contain /limit, got %s", r.URL.Path)
-				}
-
-				w.WriteHeader(tc.mockStatusCode)
 				if tc.mockStatusCode == http.StatusOK {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(tc.mockStatusCode)
 					json.NewEncoder(w).Encode(tc.mockResponse)
 				} else {
+					w.WriteHeader(tc.mockStatusCode)
 					w.Write([]byte("error message"))
 				}
 			}))
 			defer mockServer.Close()
 
-			cfg := newTestConfig(mockServer.URL)
+			client, _ := schema.NewInternxtClient(mockServer.URL, "token")
+			limit, err := GetLimit(context.Background(), client)
 
-			limit, err := GetLimit(context.Background(), cfg)
-
-			if tc.expectError {
-				if err == nil {
-					t.Error("expected error, got nil")
-				}
-				if tc.errorContains != "" && !strings.Contains(err.Error(), tc.errorContains) {
-					t.Errorf("expected error to contain %q, got %q", tc.errorContains, err.Error())
-				}
+			if tc.errorContains != "" {
+				assert.ErrorContains(t, err, tc.errorContains)
 			} else {
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				if limit == nil {
-					t.Fatal("expected limit response, got nil")
-				}
-				if limit.MaxSpaceBytes != tc.mockResponse.MaxSpaceBytes {
-					t.Errorf("expected MaxSpaceBytes %d, got %d", tc.mockResponse.MaxSpaceBytes, limit.MaxSpaceBytes)
-				}
+				assert.NoError(t, err)
+				assert.NotNil(t, limit)
+				assert.Equal(t, tc.mockResponse.MaxSpaceBytes, limit.MaxSpaceBytes)
 			}
 		})
 	}
@@ -221,44 +174,20 @@ func TestGetLimit(t *testing.T) {
 
 func TestGetLimitInvalidJSON(t *testing.T) {
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("invalid json response"))
 	}))
 	defer mockServer.Close()
 
-	cfg := newTestConfig(mockServer.URL)
+	client, _ := schema.NewInternxtClient(mockServer.URL, "token")
+	_, err := GetLimit(context.Background(), client)
 
-	_, err := GetLimit(context.Background(), cfg)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON, got nil")
-	}
-	if !strings.Contains(err.Error(), "failed to decode") {
-		t.Errorf("expected error to contain 'failed to decode', got %q", err.Error())
-	}
-}
-
-func TestGetUsageHTTPClientError(t *testing.T) {
-	// Use an invalid URL that will cause the HTTP client to fail
-	cfg := newTestConfig("http://invalid-host-that-does-not-exist-12345.local")
-
-	_, err := GetUsage(context.Background(), cfg)
-	if err == nil {
-		t.Fatal("expected error with invalid host, got nil")
-	}
-	if !strings.Contains(err.Error(), "failed to execute") {
-		t.Errorf("expected error to contain 'failed to execute', got %q", err.Error())
-	}
+	assert.ErrorContains(t, err, "failed to parse response")
 }
 
 func TestGetLimitHTTPClientError(t *testing.T) {
-	// Use an invalid URL that will cause the HTTP client to fail
-	cfg := newTestConfig("http://invalid-host-that-does-not-exist-12345.local")
-
-	_, err := GetLimit(context.Background(), cfg)
-	if err == nil {
-		t.Fatal("expected error with invalid host, got nil")
-	}
-	if !strings.Contains(err.Error(), "failed to execute") {
-		t.Errorf("expected error to contain 'failed to execute', got %q", err.Error())
-	}
+	client, _ := schema.NewInternxtClient("http://invalid-host-that-does-not-exist", "token")
+	_, err := GetLimit(context.Background(), client)
+	assert.ErrorContains(t, err, "no such host")
 }
