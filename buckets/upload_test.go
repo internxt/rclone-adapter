@@ -53,10 +53,6 @@ func TestUploadFileStream(t *testing.T) {
 					resp := FinishUploadResp{ID: "stream-file-id"}
 					json.NewEncoder(w).Encode(resp)
 				}
-				m.createMetaHandler = func(w http.ResponseWriter, r *http.Request) {
-					resp := CreateMetaResponse{UUID: "stream-uuid", FileID: "stream-file-id"}
-					json.NewEncoder(w).Encode(resp)
-				}
 			},
 			expectError: false,
 		},
@@ -176,10 +172,6 @@ func TestUploadFileStreamMultipart(t *testing.T) {
 				}
 				m.finishHandler = func(w http.ResponseWriter, r *http.Request) {
 					resp := FinishUploadResp{ID: "multipart-file-id"}
-					json.NewEncoder(w).Encode(resp)
-				}
-				m.createMetaHandler = func(w http.ResponseWriter, r *http.Request) {
-					resp := CreateMetaResponse{UUID: "multipart-uuid", FileID: "multipart-file-id"}
 					json.NewEncoder(w).Encode(resp)
 				}
 			},
