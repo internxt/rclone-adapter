@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -652,4 +653,283 @@ func TestUploadFileNameParsing(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestEncryptionSetup tests the encryptionSetup helper function
+func TestEncryptionSetup(t *testing.T) {
+	testContent := []byte("test content for encryption")
+
+	t.Run("successful encryption setup", func(t *testing.T) {
+		cfg := &config.Config{
+			Mnemonic: TestMnemonic,
+			Bucket:   TestBucket7,
+		}
+
+		reader := bytes.NewReader(testContent)
+		encryptedReader, hasher, encIndex, err := encryptionSetup(reader, cfg)
+
+		if err != nil {
+			t.Fatalf("encryptionSetup() error = %v, want nil", err)
+		}
+
+		if encryptedReader == nil {
+			t.Error("encryptedReader should not be nil")
+		}
+
+		if hasher == nil {
+			t.Error("hasher should not be nil")
+		}
+
+		if encIndex == "" {
+			t.Error("encIndex should not be empty")
+		}
+
+		if len(encIndex) != 64 {
+			t.Errorf("encIndex length = %d, want 64", len(encIndex))
+		}
+	})
+
+	t.Run("error - invalid mnemonic", func(t *testing.T) {
+		cfg := &config.Config{
+			Mnemonic: "invalid mnemonic that is not a valid BIP39 phrase",
+			Bucket:   TestBucket7,
+		}
+
+		reader := bytes.NewReader(testContent)
+		_, _, _, err := encryptionSetup(reader, cfg)
+
+		if err == nil {
+			t.Error("encryptionSetup() with invalid mnemonic should return error")
+		}
+
+		if !strings.Contains(err.Error(), "failed to generate file key") {
+			t.Errorf("error should contain 'failed to generate file key', got: %v", err)
+		}
+	})
+
+	t.Run("error - invalid bucket ID", func(t *testing.T) {
+		cfg := &config.Config{
+			Mnemonic: TestMnemonic,
+			Bucket:   "invalid-bucket-id-not-hex",
+		}
+
+		reader := bytes.NewReader(testContent)
+		_, _, _, err := encryptionSetup(reader, cfg)
+
+		if err == nil {
+			t.Error("encryptionSetup() with invalid bucket should return error")
+		}
+	})
+}
+
+// TestUploadEncryptedData tests the uploadEncryptedData helper function
+func TestUploadEncryptedData(t *testing.T) {
+	testContent := []byte("encrypted test content")
+
+	t.Run("successful upload", func(t *testing.T) {
+		mockServer := newMockMultiEndpointServer()
+		defer mockServer.Close()
+
+		var transferredData []byte
+		mockServer.startHandler = func(w http.ResponseWriter, r *http.Request) {
+			resp := StartUploadResp{
+				Uploads: []UploadPart{
+					{
+						UUID: "test-uuid",
+						URL:  mockServer.URL() + "/upload",
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		}
+
+		mockServer.transferHandler = func(w http.ResponseWriter, r *http.Request) {
+			data, _ := io.ReadAll(r.Body)
+			transferredData = data
+			w.Header().Set("ETag", "\"test-etag\"")
+			w.WriteHeader(http.StatusOK)
+		}
+
+		mockServer.finishHandler = func(w http.ResponseWriter, r *http.Request) {
+			resp := FinishUploadResp{
+				ID: "network-file-id-123",
+			}
+			json.NewEncoder(w).Encode(resp)
+		}
+
+		cfg := newTestConfigWithSetup(mockServer.URL(), func(c *config.Config) {
+			c.Bucket = TestBucket7
+		})
+
+		reader := bytes.NewReader(testContent)
+		encryptedReader, hasher, encIndex, err := encryptionSetup(reader, cfg)
+		if err != nil {
+			t.Fatalf("encryptionSetup failed: %v", err)
+		}
+
+		fileID, err := uploadEncryptedData(context.Background(), cfg, encryptedReader, hasher, encIndex, int64(len(testContent)))
+
+		if err != nil {
+			t.Fatalf("uploadEncryptedData() error = %v, want nil", err)
+		}
+
+		if fileID != "network-file-id-123" {
+			t.Errorf("fileID = %s, want 'network-file-id-123'", fileID)
+		}
+
+		if len(transferredData) == 0 {
+			t.Error("no data was transferred")
+		}
+	})
+
+	t.Run("error - StartUpload fails", func(t *testing.T) {
+		mockServer := newMockMultiEndpointServer()
+		defer mockServer.Close()
+
+		mockServer.startHandler = func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("start upload error"))
+		}
+
+		cfg := newTestConfigWithSetup(mockServer.URL(), func(c *config.Config) {
+			c.Bucket = TestBucket7
+		})
+
+		reader := bytes.NewReader(testContent)
+		encryptedReader, hasher, encIndex, err := encryptionSetup(reader, cfg)
+		if err != nil {
+			t.Fatalf("encryptionSetup failed: %v", err)
+		}
+
+		_, err = uploadEncryptedData(context.Background(), cfg, encryptedReader, hasher, encIndex, int64(len(testContent)))
+
+		if err == nil {
+			t.Error("uploadEncryptedData() should return error when StartUpload fails")
+		}
+
+		if !strings.Contains(err.Error(), "failed to start upload") {
+			t.Errorf("error should contain 'failed to start upload', got: %v", err)
+		}
+	})
+
+	t.Run("error - empty uploads array", func(t *testing.T) {
+		mockServer := newMockMultiEndpointServer()
+		defer mockServer.Close()
+
+		mockServer.startHandler = func(w http.ResponseWriter, r *http.Request) {
+			resp := StartUploadResp{
+				Uploads: []UploadPart{},
+			}
+			json.NewEncoder(w).Encode(resp)
+		}
+
+		cfg := newTestConfigWithSetup(mockServer.URL(), func(c *config.Config) {
+			c.Bucket = TestBucket7
+		})
+
+		reader := bytes.NewReader(testContent)
+		encryptedReader, hasher, encIndex, err := encryptionSetup(reader, cfg)
+		if err != nil {
+			t.Fatalf("encryptionSetup failed: %v", err)
+		}
+
+		_, err = uploadEncryptedData(context.Background(), cfg, encryptedReader, hasher, encIndex, int64(len(testContent)))
+
+		if err == nil {
+			t.Error("uploadEncryptedData() should return error when Uploads array is empty")
+		}
+
+		if !strings.Contains(err.Error(), "startResp.Uploads is empty") {
+			t.Errorf("error should contain 'startResp.Uploads is empty', got: %v", err)
+		}
+	})
+
+	t.Run("error - Transfer fails", func(t *testing.T) {
+		mockServer := newMockMultiEndpointServer()
+		defer mockServer.Close()
+
+		mockServer.startHandler = func(w http.ResponseWriter, r *http.Request) {
+			resp := StartUploadResp{
+				Uploads: []UploadPart{
+					{
+						UUID: "test-uuid",
+						URL:  mockServer.URL() + "/upload",
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		}
+
+		mockServer.transferHandler = func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("transfer error"))
+		}
+
+		cfg := newTestConfigWithSetup(mockServer.URL(), func(c *config.Config) {
+			c.Bucket = TestBucket7
+		})
+
+		reader := bytes.NewReader(testContent)
+		encryptedReader, hasher, encIndex, err := encryptionSetup(reader, cfg)
+		if err != nil {
+			t.Fatalf("encryptionSetup failed: %v", err)
+		}
+
+		_, err = uploadEncryptedData(context.Background(), cfg, encryptedReader, hasher, encIndex, int64(len(testContent)))
+
+		if err == nil {
+			t.Error("uploadEncryptedData() should return error when Transfer fails")
+		}
+
+		if !strings.Contains(err.Error(), "failed to transfer data") {
+			t.Errorf("error should contain 'failed to transfer data', got: %v", err)
+		}
+	})
+
+	t.Run("error - FinishUpload fails", func(t *testing.T) {
+		mockServer := newMockMultiEndpointServer()
+		defer mockServer.Close()
+
+		mockServer.startHandler = func(w http.ResponseWriter, r *http.Request) {
+			resp := StartUploadResp{
+				Uploads: []UploadPart{
+					{
+						UUID: "test-uuid",
+						URL:  mockServer.URL() + "/upload",
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		}
+
+		mockServer.transferHandler = func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("ETag", "\"test-etag\"")
+			w.WriteHeader(http.StatusOK)
+		}
+
+		mockServer.finishHandler = func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("finish upload error"))
+		}
+
+		cfg := newTestConfigWithSetup(mockServer.URL(), func(c *config.Config) {
+			c.Bucket = TestBucket7
+		})
+
+		reader := bytes.NewReader(testContent)
+		encryptedReader, hasher, encIndex, err := encryptionSetup(reader, cfg)
+		if err != nil {
+			t.Fatalf("encryptionSetup failed: %v", err)
+		}
+
+		_, err = uploadEncryptedData(context.Background(), cfg, encryptedReader, hasher, encIndex, int64(len(testContent)))
+
+		if err == nil {
+			t.Error("uploadEncryptedData() should return error when FinishUpload fails")
+		}
+
+		if !strings.Contains(err.Error(), "failed to finish upload") {
+			t.Errorf("error should contain 'failed to finish upload', got: %v", err)
+		}
+	})
 }
