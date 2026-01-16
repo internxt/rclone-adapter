@@ -299,9 +299,47 @@ func UploadFileStreamAuto(ctx context.Context, cfg *config.Config, targetFolderU
 func uploadThumbnailAsync(ctx context.Context, cfg *config.Config, fileUUID, fileType string, originalData []byte) {
 	bgCtx := context.Background()
 
-	if err := uploadThumbnail(bgCtx, cfg, fileUUID, fileType, originalData); err != nil {
-		fmt.Printf("[WARN] Thumbnail upload failed for %s: %v\n", fileUUID, err)
+	if err := uploadThumbnailWithRetry(bgCtx, cfg, fileUUID, fileType, originalData); err != nil {
+		fmt.Printf("[WARN] Thumbnail upload failed for %s after retries: %v\n", fileUUID, err)
 	}
+}
+
+// uploadThumbnailWithRetry attempts thumbnail upload with exponential backoff
+func uploadThumbnailWithRetry(ctx context.Context, cfg *config.Config, fileUUID, fileType string, originalData []byte) error {
+	const maxRetries = 5
+	const baseDelay = 2 * time.Second
+
+	var lastErr error
+	for attempt := range maxRetries {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		if attempt > 0 {
+			delay := baseDelay * time.Duration(1<<uint(attempt-1))
+			timer := time.NewTimer(delay)
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+				timer.Stop()
+				return ctx.Err()
+			}
+		}
+
+		err := uploadThumbnail(ctx, cfg, fileUUID, fileType, originalData)
+		if err == nil {
+			return nil
+		}
+
+		lastErr = err
+		if !isRetryableError(err) {
+			return fmt.Errorf("non-retryable error: %w", err)
+		}
+	}
+
+	return fmt.Errorf("thumbnail upload failed after %d retries: %w", maxRetries, lastErr)
 }
 
 // uploadThumbnail generates and uploads a thumbnail for the given file
