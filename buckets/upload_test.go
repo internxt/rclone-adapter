@@ -1172,12 +1172,65 @@ func TestUploadThumbnailAsync(t *testing.T) {
 
 		cfg := newTestConfigWithSetup(mockServer.URL(), nil)
 
-		uploadThumbnailAsync(context.Background(), cfg, TestThumbFileUUID, TestThumbType, TestValidPNG)
+		thumbnailWG.Add(1)
+		go uploadThumbnailAsync(context.Background(), cfg, TestThumbFileUUID, TestThumbType, TestValidPNG)
 
 		select {
 		case <-done:
 		case <-time.After(10 * time.Second):
 			t.Fatal("async upload did not complete in time")
+		}
+	})
+}
+
+// TestWaitForPendingThumbnails tests that WaitForPendingThumbnails blocks until thumbnails complete
+func TestWaitForPendingThumbnails(t *testing.T) {
+	t.Run("waits for pending uploads", func(t *testing.T) {
+		mockServer := newMockMultiEndpointServer()
+		defer mockServer.Close()
+
+		uploadStarted := make(chan struct{})
+		uploadComplete := make(chan struct{})
+
+		mockServer.startHandler = func(w http.ResponseWriter, r *http.Request) {
+			close(uploadStarted)
+			resp := StartUploadResp{
+				Uploads: []UploadPart{
+					{UUID: TestThumbUUID, URL: mockServer.URL() + TestThumbPath},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		}
+
+		mockServer.transferHandler = func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(100 * time.Millisecond)
+			w.Header().Set("ETag", TestThumbETag)
+			w.WriteHeader(http.StatusOK)
+		}
+
+		mockServer.finishHandler = func(w http.ResponseWriter, r *http.Request) {
+			resp := FinishUploadResp{ID: TestThumbFileID}
+			json.NewEncoder(w).Encode(resp)
+		}
+
+		mockServer.thumbnailHandler = func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusCreated)
+			close(uploadComplete)
+		}
+
+		cfg := newTestConfigWithSetup(mockServer.URL(), nil)
+
+		thumbnailWG.Add(1)
+		go uploadThumbnailAsync(context.Background(), cfg, TestThumbFileUUID, TestThumbType, TestValidPNG)
+
+		<-uploadStarted
+
+		WaitForPendingThumbnails()
+
+		select {
+		case <-uploadComplete:
+		default:
+			t.Fatal("WaitForPendingThumbnails returned before upload completed")
 		}
 	})
 }
