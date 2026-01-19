@@ -933,3 +933,251 @@ func TestUploadEncryptedData(t *testing.T) {
 		}
 	})
 }
+
+// TestUploadThumbnailWithRetry tests the thumbnail upload retry logic
+func TestUploadThumbnailWithRetry(t *testing.T) {
+	t.Run("successful upload on first try", func(t *testing.T) {
+		mockServer := newMockMultiEndpointServer()
+		defer mockServer.Close()
+
+		mockServer.startHandler = func(w http.ResponseWriter, r *http.Request) {
+			resp := StartUploadResp{
+				Uploads: []UploadPart{
+					{UUID: TestThumbUUID, URL: mockServer.URL() + TestThumbPath},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		}
+
+		mockServer.transferHandler = func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("ETag", TestThumbETag)
+			w.WriteHeader(http.StatusOK)
+		}
+
+		mockServer.finishHandler = func(w http.ResponseWriter, r *http.Request) {
+			resp := FinishUploadResp{ID: TestThumbFileID}
+			json.NewEncoder(w).Encode(resp)
+		}
+
+		mockServer.thumbnailHandler = func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusCreated)
+		}
+
+		cfg := newTestConfigWithSetup(mockServer.URL(), nil)
+
+		err := uploadThumbnailWithRetry(context.Background(), cfg, TestThumbFileUUID, TestThumbType, TestValidPNG)
+		if err != nil {
+			t.Fatalf("expected success, got error: %v", err)
+		}
+	})
+
+	t.Run("successful upload after retries", func(t *testing.T) {
+		mockServer := newMockMultiEndpointServer()
+		defer mockServer.Close()
+
+		var attemptCount int
+
+		mockServer.startHandler = func(w http.ResponseWriter, r *http.Request) {
+			attemptCount++
+			if attemptCount < 3 {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			resp := StartUploadResp{
+				Uploads: []UploadPart{
+					{UUID: TestThumbUUID, URL: mockServer.URL() + TestThumbPath},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		}
+
+		mockServer.transferHandler = func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("ETag", TestThumbETag)
+			w.WriteHeader(http.StatusOK)
+		}
+
+		mockServer.finishHandler = func(w http.ResponseWriter, r *http.Request) {
+			resp := FinishUploadResp{ID: TestThumbFileID}
+			json.NewEncoder(w).Encode(resp)
+		}
+
+		mockServer.thumbnailHandler = func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusCreated)
+		}
+
+		cfg := newTestConfigWithSetup(mockServer.URL(), nil)
+
+		err := uploadThumbnailWithRetry(context.Background(), cfg, TestThumbFileUUID, TestThumbType, TestValidPNG)
+		if err != nil {
+			t.Fatalf("expected success after retries, got error: %v", err)
+		}
+
+		if attemptCount != 3 {
+			t.Errorf("expected 3 attempts, got %d", attemptCount)
+		}
+	})
+
+	t.Run("failure after all retries exhausted", func(t *testing.T) {
+		mockServer := newMockMultiEndpointServer()
+		defer mockServer.Close()
+
+		var attemptCount int
+
+		mockServer.startHandler = func(w http.ResponseWriter, r *http.Request) {
+			attemptCount++
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+
+		cfg := newTestConfigWithSetup(mockServer.URL(), nil)
+
+		err := uploadThumbnailWithRetry(context.Background(), cfg, TestThumbFileUUID, TestThumbType, TestValidPNG)
+		if err == nil {
+			t.Fatal("expected error after retries exhausted, got nil")
+		}
+
+		if !strings.Contains(err.Error(), "after 5 retries") {
+			t.Errorf("expected error to mention retries, got: %v", err)
+		}
+
+		if attemptCount != 5 {
+			t.Errorf("expected 5 attempts, got %d", attemptCount)
+		}
+	})
+
+	t.Run("non-retryable error fails immediately", func(t *testing.T) {
+		mockServer := newMockMultiEndpointServer()
+		defer mockServer.Close()
+
+		var attemptCount int
+
+		mockServer.startHandler = func(w http.ResponseWriter, r *http.Request) {
+			attemptCount++
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte("not found: 404"))
+		}
+
+		cfg := newTestConfigWithSetup(mockServer.URL(), nil)
+
+		err := uploadThumbnailWithRetry(context.Background(), cfg, TestThumbFileUUID, TestThumbType, TestValidPNG)
+		if err == nil {
+			t.Fatal("expected error for 404, got nil")
+		}
+
+		if !strings.Contains(err.Error(), "non-retryable error") {
+			t.Errorf("expected non-retryable error, got: %v", err)
+		}
+
+		if attemptCount != 1 {
+			t.Errorf("expected 1 attempt for non-retryable error, got %d", attemptCount)
+		}
+	})
+
+	t.Run("context cancellation", func(t *testing.T) {
+		mockServer := newMockMultiEndpointServer()
+		defer mockServer.Close()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		cfg := newTestConfigWithSetup(mockServer.URL(), nil)
+
+		err := uploadThumbnailWithRetry(ctx, cfg, TestThumbFileUUID, TestThumbType, TestValidPNG)
+		if err == nil {
+			t.Fatal("expected error for cancelled context, got nil")
+		}
+
+		if !strings.Contains(err.Error(), "context canceled") {
+			t.Errorf("expected context canceled error, got: %v", err)
+		}
+	})
+
+	t.Run("thumbnail API registration failure triggers retry", func(t *testing.T) {
+		mockServer := newMockMultiEndpointServer()
+		defer mockServer.Close()
+
+		var thumbnailAttemptCount int
+
+		mockServer.startHandler = func(w http.ResponseWriter, r *http.Request) {
+			resp := StartUploadResp{
+				Uploads: []UploadPart{
+					{UUID: TestThumbUUID, URL: mockServer.URL() + TestThumbPath},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		}
+
+		mockServer.transferHandler = func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("ETag", TestThumbETag)
+			w.WriteHeader(http.StatusOK)
+		}
+
+		mockServer.finishHandler = func(w http.ResponseWriter, r *http.Request) {
+			resp := FinishUploadResp{ID: TestThumbFileID}
+			json.NewEncoder(w).Encode(resp)
+		}
+
+		mockServer.thumbnailHandler = func(w http.ResponseWriter, r *http.Request) {
+			thumbnailAttemptCount++
+			if thumbnailAttemptCount < 3 {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+		}
+
+		cfg := newTestConfigWithSetup(mockServer.URL(), nil)
+
+		err := uploadThumbnailWithRetry(context.Background(), cfg, TestThumbFileUUID, TestThumbType, TestValidPNG)
+		if err != nil {
+			t.Fatalf("expected success after retries, got error: %v", err)
+		}
+
+		if thumbnailAttemptCount != 3 {
+			t.Errorf("expected 3 thumbnail API attempts, got %d", thumbnailAttemptCount)
+		}
+	})
+}
+
+// TestUploadThumbnailAsync tests the async thumbnail upload wrapper
+func TestUploadThumbnailAsync(t *testing.T) {
+	t.Run("async upload completes without blocking", func(t *testing.T) {
+		mockServer := newMockMultiEndpointServer()
+		defer mockServer.Close()
+
+		done := make(chan struct{})
+
+		mockServer.startHandler = func(w http.ResponseWriter, r *http.Request) {
+			resp := StartUploadResp{
+				Uploads: []UploadPart{
+					{UUID: TestThumbUUID, URL: mockServer.URL() + TestThumbPath},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+		}
+
+		mockServer.transferHandler = func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("ETag", TestThumbETag)
+			w.WriteHeader(http.StatusOK)
+		}
+
+		mockServer.finishHandler = func(w http.ResponseWriter, r *http.Request) {
+			resp := FinishUploadResp{ID: TestThumbFileID}
+			json.NewEncoder(w).Encode(resp)
+		}
+
+		mockServer.thumbnailHandler = func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusCreated)
+			close(done)
+		}
+
+		cfg := newTestConfigWithSetup(mockServer.URL(), nil)
+
+		uploadThumbnailAsync(context.Background(), cfg, TestThumbFileUUID, TestThumbType, TestValidPNG)
+
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Fatal("async upload did not complete in time")
+		}
+	})
+}
