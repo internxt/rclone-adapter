@@ -14,12 +14,21 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/internxt/rclone-adapter/config"
 	"github.com/internxt/rclone-adapter/errors"
 	"github.com/internxt/rclone-adapter/thumbnails"
 )
+
+// thumbnailWG tracks pending thumbnail uploads to ensure they complete before shutdown
+var thumbnailWG sync.WaitGroup
+
+// WaitForPendingThumbnails blocks until all pending thumbnail uploads complete.
+func WaitForPendingThumbnails() {
+	thumbnailWG.Wait()
+}
 
 // encryptionSetup handles the encryption preparation for an upload.
 // Returns the encrypted reader with hash computation, the sha256 hasher, and the encryption index.
@@ -289,6 +298,7 @@ func UploadFileStreamAuto(ctx context.Context, cfg *config.Config, targetFolderU
 	}
 
 	if capturedData != nil && capturedData.Len() > 0 {
+		thumbnailWG.Add(1)
 		go uploadThumbnailAsync(ctx, cfg, meta.UUID, ext, capturedData.Bytes())
 	}
 
@@ -297,6 +307,8 @@ func UploadFileStreamAuto(ctx context.Context, cfg *config.Config, targetFolderU
 
 // uploadThumbnailAsync handles thumbnail upload in a background goroutine
 func uploadThumbnailAsync(ctx context.Context, cfg *config.Config, fileUUID, fileType string, originalData []byte) {
+	defer thumbnailWG.Done()
+
 	bgCtx := context.Background()
 
 	if err := uploadThumbnailWithRetry(bgCtx, cfg, fileUUID, fileType, originalData); err != nil {
