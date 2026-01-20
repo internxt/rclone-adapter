@@ -1234,3 +1234,234 @@ func TestWaitForPendingThumbnails(t *testing.T) {
 		}
 	})
 }
+
+// TestUploadFileStreamAuto_EmptyFile tests that empty files skip S3 upload and only create metadata
+func TestUploadFileStreamAuto_EmptyFile(t *testing.T) {
+	mockServer := newMockMultiEndpointServer()
+	defer mockServer.Close()
+
+	startCalled := false
+	transferCalled := false
+	finishCalled := false
+
+	mockServer.startHandler = func(w http.ResponseWriter, r *http.Request) {
+		startCalled = true
+		t.Error("START handler should not be called for empty files")
+		w.WriteHeader(http.StatusBadRequest)
+	}
+
+	mockServer.transferHandler = func(w http.ResponseWriter, r *http.Request) {
+		transferCalled = true
+		t.Error("TRANSFER handler should not be called for empty files")
+		w.WriteHeader(http.StatusBadRequest)
+	}
+
+	mockServer.finishHandler = func(w http.ResponseWriter, r *http.Request) {
+		finishCalled = true
+		t.Error("FINISH handler should not be called for empty files")
+		w.WriteHeader(http.StatusBadRequest)
+	}
+
+	metaCalled := false
+	var capturedFileID *string
+	var capturedSize int64
+
+	mockServer.createMetaHandler = func(w http.ResponseWriter, r *http.Request) {
+		metaCalled = true
+		var req CreateMetaRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("failed to decode CreateMetaRequest: %v", err)
+		}
+
+		capturedFileID = req.FileID
+		capturedSize = req.Size
+
+		resp := CreateMetaResponse{
+			UUID:   "empty-file-uuid",
+			FileID: "",
+			Name:   "empty",
+			Type:   "txt",
+			Size:   "0",
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+	}
+
+	cfg := newTestConfigWithSetup(mockServer.URL(), func(c *config.Config) {
+		c.Bucket = "test-bucket-empty"
+	})
+
+	emptyReader := bytes.NewReader([]byte{})
+	result, err := UploadFileStreamAuto(context.Background(), cfg, TestFolderUUID, "empty.txt", emptyReader, 0, time.Now())
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected result, got nil")
+	}
+
+	if !metaCalled {
+		t.Error("CreateMetaFile handler should have been called")
+	}
+	if startCalled {
+		t.Error("START handler was called but should have been skipped")
+	}
+	if transferCalled {
+		t.Error("TRANSFER handler was called but should have been skipped")
+	}
+	if finishCalled {
+		t.Error("FINISH handler was called but should have been skipped")
+	}
+
+	if capturedFileID != nil {
+		t.Errorf("expected fileID to be nil, got %v", *capturedFileID)
+	}
+
+	if capturedSize != 0 {
+		t.Errorf("expected size 0, got %d", capturedSize)
+	}
+}
+
+// TestUploadFileStreamAuto_EmptyFile_UnknownSize tests empty file upload when size is unknown initially
+func TestUploadFileStreamAuto_EmptyFile_UnknownSize(t *testing.T) {
+	mockServer := newMockMultiEndpointServer()
+	defer mockServer.Close()
+
+	uploadsCalled := false
+
+	mockServer.startHandler = func(w http.ResponseWriter, r *http.Request) {
+		uploadsCalled = true
+		t.Error("Upload handlers should not be called for empty files")
+		w.WriteHeader(http.StatusBadRequest)
+	}
+
+	mockServer.transferHandler = func(w http.ResponseWriter, r *http.Request) {
+		uploadsCalled = true
+		t.Error("Upload handlers should not be called for empty files")
+		w.WriteHeader(http.StatusBadRequest)
+	}
+
+	mockServer.finishHandler = func(w http.ResponseWriter, r *http.Request) {
+		uploadsCalled = true
+		t.Error("Upload handlers should not be called for empty files")
+		w.WriteHeader(http.StatusBadRequest)
+	}
+
+	metaCalled := false
+	mockServer.createMetaHandler = func(w http.ResponseWriter, r *http.Request) {
+		metaCalled = true
+		var req CreateMetaRequest
+		json.NewDecoder(r.Body).Decode(&req)
+
+		if req.FileID != nil {
+			t.Errorf("expected fileID to be nil for empty file, got %v", *req.FileID)
+		}
+		if req.Size != 0 {
+			t.Errorf("expected size 0, got %d", req.Size)
+		}
+
+		resp := CreateMetaResponse{
+			UUID: "empty-uuid",
+			Size: "0",
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+	}
+
+	cfg := newTestConfigWithSetup(mockServer.URL(), func(c *config.Config) {
+		c.Bucket = "test-bucket-empty-unknown"
+	})
+
+	emptyReader := bytes.NewReader([]byte{})
+	result, err := UploadFileStreamAuto(context.Background(), cfg, TestFolderUUID, "empty-unknown.txt", emptyReader, -1, time.Now())
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected result, got nil")
+	}
+
+	if !metaCalled {
+		t.Error("CreateMetaFile should have been called")
+	}
+	if uploadsCalled {
+		t.Error("Upload handlers should have been skipped for empty file")
+	}
+}
+
+// TestUploadFileStream_EmptyFile tests empty file handling with various filenames
+func TestUploadFileStream_EmptyFile_ViaStreamAuto(t *testing.T) {
+	mockServer := newMockMultiEndpointServer()
+	defer mockServer.Close()
+
+	var capturedRequest *CreateMetaRequest
+
+	mockServer.createMetaHandler = func(w http.ResponseWriter, r *http.Request) {
+		var req CreateMetaRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("failed to decode request: %v", err)
+		}
+		capturedRequest = &req
+
+		resp := CreateMetaResponse{
+			UUID:   "test-uuid",
+			Name:   req.Name,
+			Type:   req.Type,
+			Size:   json.Number(fmt.Sprintf("%d", req.Size)),
+			FileID: "",
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+	}
+
+	cfg := newTestConfigWithSetup(mockServer.URL(), func(c *config.Config) {
+		c.Bucket = "test-bucket-stream-empty"
+	})
+
+	testCases := []struct {
+		name         string
+		fileName     string
+		expectedName string
+		expectedType string
+	}{
+		{"simple empty file", "empty.txt", "empty", "txt"},
+		{"empty file no extension", "emptyfile", "emptyfile", ""},
+		{"empty hidden file", ".hidden", "", "hidden"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			capturedRequest = nil
+
+			emptyReader := bytes.NewReader([]byte{})
+			result, err := UploadFileStreamAuto(context.Background(), cfg, TestFolderUUID, tc.fileName, emptyReader, 0, time.Now())
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result == nil {
+				t.Fatal("expected result, got nil")
+			}
+
+			if capturedRequest == nil {
+				t.Fatal("CreateMetaFile was not called")
+			}
+
+			if capturedRequest.PlainName != tc.expectedName {
+				t.Errorf("expected name '%s', got '%s'", tc.expectedName, capturedRequest.PlainName)
+			}
+			if capturedRequest.Type != tc.expectedType {
+				t.Errorf("expected type '%s', got '%s'", tc.expectedType, capturedRequest.Type)
+			}
+
+			if capturedRequest.FileID != nil {
+				t.Errorf("expected fileID to be nil, got %v", *capturedRequest.FileID)
+			}
+			if capturedRequest.Size != 0 {
+				t.Errorf("expected size 0, got %d", capturedRequest.Size)
+			}
+		})
+	}
+}
