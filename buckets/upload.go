@@ -11,7 +11,6 @@ import (
 	"hash"
 	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -90,46 +89,10 @@ func uploadEncryptedData(ctx context.Context, cfg *config.Config, encryptedReade
 	return finishResp.ID, nil
 }
 
-func UploadFile(ctx context.Context, cfg *config.Config, filePath, targetFolderUUID string, modTime time.Time) (*CreateMetaResponse, error) {
-	f, err := os.Open(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file %s: %w", filePath, err)
-	}
-	defer f.Close()
-
-	fileInfo, err := f.Stat()
-	if err != nil {
-		return nil, fmt.Errorf("failed to stat file %s: %w", filePath, err)
-	}
-	plainSize := fileInfo.Size()
-
-	// Setup encryption
-	encryptedReader, sha256Hasher, encIndex, err := encryptionSetup(f, cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	// Upload to network
-	fileID, err := uploadEncryptedData(ctx, cfg, encryptedReader, sha256Hasher, encIndex, plainSize)
-	if err != nil {
-		return nil, fmt.Errorf("failed to transfer file data: %w", err)
-	}
-
-	// Create Drive file metadata
-	base := filepath.Base(filePath)
-	name := strings.TrimSuffix(base, filepath.Ext(base))
-	ext := strings.TrimPrefix(filepath.Ext(base), ".")
-	meta, err := CreateMetaFile(ctx, cfg, name, cfg.Bucket, &fileID, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create file metadata: %w", err)
-	}
-	return meta, nil
-}
-
 // UploadFileStream uploads data from the provided io.Reader into Internxt,
 // encrypting it on the fly and creating the metadata file in the target folder.
 // It returns the CreateMetaResponse of the created file entry.
-func UploadFileStream(ctx context.Context, cfg *config.Config, targetFolderUUID, fileName string, in io.Reader, plainSize int64, modTime time.Time) (*CreateMetaResponse, error) {
+func UploadFileStream(ctx context.Context, cfg *config.Config, targetFolderUUID, fileName string, in io.Reader, plainSize int64, modTime time.Time) (*string, error) {
 	var ph [32]byte
 	if _, err := rand.Read(ph[:]); err != nil {
 		return nil, fmt.Errorf("cannot generate random index: %w", err)
@@ -215,19 +178,12 @@ func UploadFileStream(ctx context.Context, cfg *config.Config, targetFolderUUID,
 		return nil, fmt.Errorf("failed to finish upload: %w", err)
 	}
 
-	base := filepath.Base(fileName)
-	name := strings.TrimSuffix(base, filepath.Ext(base))
-	ext := strings.TrimPrefix(filepath.Ext(base), ".")
-	meta, err := CreateMetaFile(ctx, cfg, name, cfg.Bucket, &finishResp.ID, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create file metadata: %w", err)
-	}
-	return meta, nil
+	return &finishResp.ID, nil
 }
 
 // UploadFileStreamMultipart uploads data from an io.Reader using multipart upload.
 // This is intended for large files (>100MB) and splits the file into multiple chunks
-func UploadFileStreamMultipart(ctx context.Context, cfg *config.Config, targetFolderUUID, fileName string, in io.Reader, plainSize int64, modTime time.Time) (*CreateMetaResponse, error) {
+func UploadFileStreamMultipart(ctx context.Context, cfg *config.Config, targetFolderUUID, fileName string, in io.Reader, plainSize int64, modTime time.Time) (*string, error) {
 	state, err := newMultipartUploadState(cfg, plainSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize multipart upload state: %w", err)
@@ -243,15 +199,7 @@ func UploadFileStreamMultipart(ctx context.Context, cfg *config.Config, targetFo
 		return nil, fmt.Errorf("failed to finish multipart upload: %w", err)
 	}
 
-	base := filepath.Base(fileName)
-	name := strings.TrimSuffix(base, filepath.Ext(base))
-	ext := strings.TrimPrefix(filepath.Ext(base), ".")
-	meta, err := CreateMetaFile(ctx, cfg, name, cfg.Bucket, &finishResp.ID, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create file metadata: %w", err)
-	}
-
-	return meta, nil
+	return &finishResp.ID, nil
 }
 
 // UploadFileStreamAuto automatically chooses between single-part and multipart upload
@@ -290,22 +238,29 @@ func UploadFileStreamAuto(ctx context.Context, cfg *config.Config, targetFolderU
 	var capturedData *bytes.Buffer
 	var capturedReader io.Reader = in
 
+	base := filepath.Base(fileName)
+	name := strings.TrimSuffix(base, filepath.Ext(base))
 	ext := strings.TrimPrefix(filepath.Ext(fileName), ".")
 	if thumbnails.IsSupportedFormat(ext) && plainSize > 0 && plainSize <= config.MaxThumbnailSourceSize {
 		capturedData = &bytes.Buffer{}
 		capturedReader = io.TeeReader(in, capturedData)
 	}
 
-	var meta *CreateMetaResponse
+	var fileId *string
 	var err error
 	if plainSize >= config.DefaultMultipartMinSize {
-		meta, err = UploadFileStreamMultipart(ctx, cfg, targetFolderUUID, fileName, capturedReader, plainSize, modTime)
+		fileId, err = UploadFileStreamMultipart(ctx, cfg, targetFolderUUID, fileName, capturedReader, plainSize, modTime)
 	} else {
-		meta, err = UploadFileStream(ctx, cfg, targetFolderUUID, fileName, capturedReader, plainSize, modTime)
+		fileId, err = UploadFileStream(ctx, cfg, targetFolderUUID, fileName, capturedReader, plainSize, modTime)
 	}
 
 	if err != nil {
 		return nil, err
+	}
+
+	meta, err := CreateMetaFile(ctx, cfg, name, cfg.Bucket, fileId, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create file metadata: %w", err)
 	}
 
 	if capturedData != nil && capturedData.Len() > 0 {
