@@ -21,6 +21,74 @@ import (
 	"github.com/internxt/rclone-adapter/thumbnails"
 )
 
+// thumbnailWG tracks pending thumbnail uploads to ensure they complete before shutdown
+var thumbnailWG sync.WaitGroup
+
+// WaitForPendingThumbnails blocks until all pending thumbnail uploads complete.
+func WaitForPendingThumbnails() {
+	thumbnailWG.Wait()
+}
+
+// encryptionSetup handles the encryption preparation for an upload.
+// Returns the encrypted reader with hash computation, the sha256 hasher, and the encryption index.
+func encryptionSetup(in io.Reader, cfg *config.Config) (io.Reader, hash.Hash, string, error) {
+	var ph [32]byte
+	if _, err := rand.Read(ph[:]); err != nil {
+		return nil, nil, "", fmt.Errorf("cannot generate random index: %w", err)
+	}
+	plainIndex := hex.EncodeToString(ph[:])
+	fileKey, iv, err := GenerateFileKey(cfg.Mnemonic, cfg.Bucket, plainIndex)
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("failed to generate file key: %w", err)
+	}
+
+	encReader, err := EncryptReader(in, fileKey, iv)
+	if err != nil {
+		return nil, nil, "", fmt.Errorf("failed to create encrypt reader: %w", err)
+	}
+
+	// Setup hash computation: RIPEMD-160(SHA-256(encrypted_data))
+	sha256Hasher := sha256.New()
+	hashedReader := io.TeeReader(encReader, sha256Hasher)
+
+	encIndex := hex.EncodeToString(ph[:])
+	return hashedReader, sha256Hasher, encIndex, nil
+}
+
+// uploadEncryptedData handles the network upload flow: StartUpload → Transfer → FinishUpload.
+// Returns the network file ID.
+func uploadEncryptedData(ctx context.Context, cfg *config.Config, encryptedReader io.Reader, sha256Hasher hash.Hash, encIndex string, size int64) (string, error) {
+	specs := []UploadPartSpec{{Index: 0, Size: size}}
+	startResp, err := StartUpload(ctx, cfg, cfg.Bucket, specs)
+	if err != nil {
+		return "", fmt.Errorf("failed to start upload: %w", err)
+	}
+
+	if len(startResp.Uploads) == 0 {
+		return "", fmt.Errorf("startResp.Uploads is empty")
+	}
+
+	part := startResp.Uploads[0]
+	uploadURL := part.URL
+	if len(part.URLs) > 0 {
+		uploadURL = part.URLs[0]
+	}
+
+	if _, err := Transfer(ctx, cfg, uploadURL, encryptedReader, size); err != nil {
+		return "", fmt.Errorf("failed to transfer data: %w", err)
+	}
+
+	sha256Result := sha256Hasher.Sum(nil)
+	partHash := ComputeFileHash(sha256Result)
+
+	finishResp, err := FinishUpload(ctx, cfg, cfg.Bucket, encIndex, []Shard{{Hash: partHash, UUID: part.UUID}})
+	if err != nil {
+		return "", fmt.Errorf("failed to finish upload: %w", err)
+	}
+
+	return finishResp.ID, nil
+}
+
 // UploadFileStream uploads data from the provided io.Reader into Internxt,
 // encrypting it on the fly and creating the metadata file in the target folder.
 // It returns the CreateMetaResponse of the created file entry.
@@ -194,6 +262,7 @@ func UploadFileStreamAuto(ctx context.Context, cfg *config.Config, targetFolderU
 	meta, err := CreateMetaFile(ctx, cfg, name, cfg.Bucket, *fileId, "03-aes", targetFolderUUID, name, ext, plainSize, modTime)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file metadata: %w", err)
+	}
 	defer thumbnailWG.Done()
 
 	bgCtx := context.Background()
