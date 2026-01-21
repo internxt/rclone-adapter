@@ -31,17 +31,36 @@ const (
 	TestFileID2       = "file-id"
 	TestFileUUID      = "file-uuid-456"
 	TestFileUUID2     = "new-file-uuid"
-	TestIndex         = "0123456789abcdef00000123456789abcdef00000123456789abcdef00000000"
+	TestIndex         = "0123456789abcdef00000123456789abcdef00000000123456789abcdef00000000"
+
+	// Thumbnail test constants
+	TestThumbFileUUID = "test-file-uuid"
+	TestThumbUUID     = "thumb-uuid"
+	TestThumbETag     = "\"thumb-etag\""
+	TestThumbFileID   = "thumb-file-id"
+	TestThumbPath     = "/upload/thumb"
+	TestThumbType     = "png"
 )
+
+var TestValidPNG = []byte{
+	0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+	0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x0A, 0x00, 0x00, 0x00, 0x0A,
+	0x08, 0x02, 0x00, 0x00, 0x00, 0x02, 0x50, 0x58, 0xEA, 0x00, 0x00, 0x00,
+	0x17, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x62, 0xF9, 0xCF, 0x80, 0x0F,
+	0x30, 0xE1, 0x95, 0x1D, 0xB1, 0xD2, 0x80, 0x00, 0x00, 0x00, 0xFF, 0xFF,
+	0x44, 0xCE, 0x01, 0x16, 0x32, 0xD9, 0xD2, 0x3E, 0x00, 0x00, 0x00, 0x00,
+	0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+}
 
 // MockMultiEndpointServer manages multiple HTTP endpoints for integration testing.
 type MockMultiEndpointServer struct {
-	startHandler          http.HandlerFunc
-	transferHandler       http.HandlerFunc
-	finishHandler         http.HandlerFunc
-	createMetaHandler     http.HandlerFunc
-	multipartStartHandler http.HandlerFunc
-	server                *httptest.Server
+	startHandler           http.HandlerFunc
+	transferHandler        http.HandlerFunc
+	finishHandler          http.HandlerFunc
+	createMetaHandler      http.HandlerFunc
+	multipartStartHandler  http.HandlerFunc
+	thumbnailHandler       http.HandlerFunc
+	server                 *httptest.Server
 }
 
 // NewMockMultiEndpointServer creates a new multi-endpoint mock server for testing
@@ -76,6 +95,11 @@ func NewMockMultiEndpointServer() *MockMultiEndpointServer {
 			// CreateMetaFile: POST /drive/files
 			if m.createMetaHandler != nil {
 				m.createMetaHandler(w, r)
+			}
+		case path == "/drive/files/thumbnail":
+			// CreateThumbnail: POST /drive/files/thumbnail
+			if m.thumbnailHandler != nil {
+				m.thumbnailHandler(w, r)
 			}
 		default:
 			http.NotFound(w, r)
