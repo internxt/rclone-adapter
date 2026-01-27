@@ -11,6 +11,7 @@ import (
 	"github.com/internxt/rclone-adapter/config"
 	"github.com/internxt/rclone-adapter/crypto"
 	"github.com/internxt/rclone-adapter/errors"
+	"github.com/tyler-smith/go-bip39"
 )
 
 type LoginRequest struct {
@@ -210,6 +211,11 @@ func DoLogin(ctx context.Context, cfg *config.Config, email, password, tfa strin
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt mnemonic: %w", err)
 	}
+
+	if !bip39.IsMnemonicValid(decryptedMnemonic) {
+		return nil, fmt.Errorf("invalid mnemonic format")
+	}
+
 	accessResp.User.Mnemonic = decryptedMnemonic
 
 	return accessResp, nil
