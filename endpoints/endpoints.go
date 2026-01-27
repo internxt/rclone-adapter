@@ -84,6 +84,11 @@ func (a *AuthEndpoints) Login() string {
 	return u
 }
 
+func (a *AuthEndpoints) CLIAccess() string {
+	u, _ := url.JoinPath(a.base, "/cli/login/access")
+	return u
+}
+
 // FileEndpoints : endpoints under /drive/files
 type FileEndpoints struct {
 	base string
