@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"time"
 )
 
 // HTTPError preserves HTTP response details
@@ -24,7 +26,19 @@ func (e *HTTPError) Error() string {
 
 // Temporary implements net.Error interface
 func (e *HTTPError) Temporary() bool {
-	return e.Response.StatusCode >= 500
+	code := e.Response.StatusCode
+	return code == 408 || code == 429 || code >= 500
+}
+
+// RetryAfter returns how long to wait before retrying based on
+// rate limit headers in the response
+func (e *HTTPError) RetryAfter() time.Duration {
+	if v := e.Response.Header.Get("x-internxt-ratelimit-reset"); v != "" {
+		if ms, err := strconv.Atoi(v); err == nil && ms > 0 {
+			return time.Duration(ms) * time.Millisecond
+		}
+	}
+	return 0
 }
 
 // StatusCode returns the HTTP status code
