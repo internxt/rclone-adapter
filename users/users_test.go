@@ -3,10 +3,14 @@ package users
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	sdkerrors "github.com/internxt/rclone-adapter/errors"
 )
 
 func TestGetUsage(t *testing.T) {
@@ -258,5 +262,94 @@ func TestGetLimitHTTPClientError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "failed to execute") {
 		t.Errorf("expected error to contain 'failed to execute', got %q", err.Error())
+	}
+}
+
+// TestGetUsage429ReturnsHTTPError verifies that a 429 from GetUsage returns
+// an *sdkerrors.HTTPError
+func TestGetUsage429ReturnsHTTPError(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "15")
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"error":"rate limited"}`))
+	}))
+	defer mockServer.Close()
+
+	cfg := newTestConfig(mockServer.URL)
+	_, err := GetUsage(context.Background(), cfg)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	var httpErr *sdkerrors.HTTPError
+	if !errors.As(err, &httpErr) {
+		t.Fatalf("expected *sdkerrors.HTTPError, got %T: %v", err, err)
+	}
+	if httpErr.StatusCode() != 429 {
+		t.Errorf("expected status 429, got %d", httpErr.StatusCode())
+	}
+	if !httpErr.Temporary() {
+		t.Error("expected Temporary() = true for 429")
+	}
+	if got := httpErr.RetryAfter(); got != 15*time.Second {
+		t.Errorf("RetryAfter() = %v, want 15s", got)
+	}
+}
+
+// TestGetLimit429ReturnsHTTPError verifies that a 429 from GetLimit returns
+// an *sdkerrors.HTTPError
+func TestGetLimit429ReturnsHTTPError(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "60")
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"error":"rate limited"}`))
+	}))
+	defer mockServer.Close()
+
+	cfg := newTestConfig(mockServer.URL)
+	_, err := GetLimit(context.Background(), cfg)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	var httpErr *sdkerrors.HTTPError
+	if !errors.As(err, &httpErr) {
+		t.Fatalf("expected *sdkerrors.HTTPError, got %T: %v", err, err)
+	}
+	if httpErr.StatusCode() != 429 {
+		t.Errorf("expected status 429, got %d", httpErr.StatusCode())
+	}
+	if !httpErr.Temporary() {
+		t.Error("expected Temporary() = true for 429")
+	}
+	if got := httpErr.RetryAfter(); got != 60*time.Second {
+		t.Errorf("RetryAfter() = %v, want 60s", got)
+	}
+}
+
+// TestGetUsage408ReturnsHTTPError verifies that a 408 timeout returns
+// a retryable *sdkerrors.HTTPError.
+func TestGetUsage408ReturnsHTTPError(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusRequestTimeout)
+		w.Write([]byte(`{"message":"Request timed out"}`))
+	}))
+	defer mockServer.Close()
+
+	cfg := newTestConfig(mockServer.URL)
+	_, err := GetUsage(context.Background(), cfg)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	var httpErr *sdkerrors.HTTPError
+	if !errors.As(err, &httpErr) {
+		t.Fatalf("expected *sdkerrors.HTTPError, got %T: %v", err, err)
+	}
+	if httpErr.StatusCode() != 408 {
+		t.Errorf("expected status 408, got %d", httpErr.StatusCode())
+	}
+	if !httpErr.Temporary() {
+		t.Error("expected Temporary() = true for 408")
 	}
 }
