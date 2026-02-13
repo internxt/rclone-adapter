@@ -33,9 +33,14 @@ func (e *HTTPError) Temporary() bool {
 // RetryAfter returns how long to wait before retrying based on
 // rate limit headers in the response
 func (e *HTTPError) RetryAfter() time.Duration {
-	if v := e.Response.Header.Get("x-internxt-ratelimit-reset"); v != "" {
-		if ms, err := strconv.Atoi(v); err == nil && ms > 0 {
-			return time.Duration(ms) * time.Millisecond
+	if v := e.Response.Header.Get("Retry-After"); v != "" {
+		if seconds, err := strconv.Atoi(v); err == nil && seconds > 0 {
+			return time.Duration(seconds) * time.Second
+		}
+		if t, err := http.ParseTime(v); err == nil {
+			if delay := time.Until(t); delay > 0 {
+				return delay
+			}
 		}
 	}
 	return 0
