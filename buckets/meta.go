@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -86,4 +87,34 @@ func CreateMetaFile(ctx context.Context, cfg *config.Config, name, bucketID stri
 		return nil, fmt.Errorf("failed to unmarshal create meta response: %w", err)
 	}
 	return &result, nil
+}
+
+// createMetaFileWithRetry wraps CreateMetaFile with exponential backoff
+// to handle eventual consistency where a newly created folder may not
+// be immediately available for file metadata operations.
+func createMetaFileWithRetry(ctx context.Context, cfg *config.Config, name, bucketID string, fileID *string, encryptVersion, folderUuid, plainName, fileType string, size int64, modTime time.Time) (*CreateMetaResponse, error) {
+	const maxRetries = 10
+	sleepTime := 100 * time.Millisecond
+
+	var lastErr error
+	for try := 1; try <= maxRetries; try++ {
+		meta, err := CreateMetaFile(ctx, cfg, name, bucketID, fileID, encryptVersion, folderUuid, plainName, fileType, size, modTime)
+		if err == nil {
+			return meta, nil
+		}
+		lastErr = err
+
+		var httpErr *errors.HTTPError
+		if !stderrors.As(err, &httpErr) || httpErr.StatusCode() != http.StatusNotFound {
+			return nil, err
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(sleepTime):
+		}
+		sleepTime *= 2
+	}
+	return nil, lastErr
 }
