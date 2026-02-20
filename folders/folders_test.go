@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/internxt/rclone-adapter/consistency"
 )
 
 func TestCreateFolder(t *testing.T) {
@@ -174,6 +176,33 @@ func TestCreateFolder(t *testing.T) {
 			t.Errorf("expected error to contain 'failed to decode', got %v", err)
 		}
 	})
+}
+
+func TestCreateFolderTracksConsistency(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := Folder{UUID: "tracked-uuid", PlainName: "test"}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer mockServer.Close()
+
+	cfg := newTestConfig(mockServer.URL)
+	_, err := CreateFolder(context.Background(), cfg, CreateFolderRequest{
+		PlainName:        "test",
+		ParentFolderUUID: "parent-uuid",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// AwaitFolder should block briefly for a just-created folder
+	start := time.Now()
+	if err := consistency.AwaitFolder(context.Background(), "tracked-uuid"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if time.Since(start) < 400*time.Millisecond {
+		t.Error("expected AwaitFolder to block for a recently created folder")
+	}
 }
 
 func TestDeleteFolder(t *testing.T) {
