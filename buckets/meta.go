@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	stderrors "errors"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 
 	"github.com/internxt/rclone-adapter/config"
+	"github.com/internxt/rclone-adapter/consistency"
 	"github.com/internxt/rclone-adapter/errors"
 )
 
@@ -41,30 +41,12 @@ type CreateMetaResponse struct {
 	Created        string      `json:"created"`
 }
 
-// CreateMetaFile creates file metadata in Drive. If the server returns a 404
-// (folder not yet visible due to eventual consistency), it waits 500ms and
-// retries once before returning the error.
+// CreateMetaFile creates file metadata in Drive for a file in the given folder.
 func CreateMetaFile(ctx context.Context, cfg *config.Config, name, bucketID string, fileID *string, encryptVersion, folderUuid, plainName, fileType string, size int64, modTime time.Time) (*CreateMetaResponse, error) {
-	result, err := doCreateMetaFile(ctx, cfg, name, bucketID, fileID, encryptVersion, folderUuid, plainName, fileType, size, modTime)
-	if err == nil {
-		return result, nil
-	}
-
-	var httpErr *errors.HTTPError
-	if !stderrors.As(err, &httpErr) || httpErr.StatusCode() != http.StatusNotFound {
+	if err := consistency.AwaitFolder(ctx, folderUuid); err != nil {
 		return nil, err
 	}
 
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-time.After(500 * time.Millisecond):
-	}
-
-	return doCreateMetaFile(ctx, cfg, name, bucketID, fileID, encryptVersion, folderUuid, plainName, fileType, size, modTime)
-}
-
-func doCreateMetaFile(ctx context.Context, cfg *config.Config, name, bucketID string, fileID *string, encryptVersion, folderUuid, plainName, fileType string, size int64, modTime time.Time) (*CreateMetaResponse, error) {
 	url := cfg.Endpoints.Drive().Files().Create()
 	reqBody := CreateMetaRequest{
 		Name:             name,

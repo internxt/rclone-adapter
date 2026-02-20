@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -202,101 +201,3 @@ func TestCreateMetaFileInvalidJSON(t *testing.T) {
 	}
 }
 
-func TestCreateMetaFileRetryOn404(t *testing.T) {
-	fileID := TestFileID
-
-	t.Run("retries once on 404 then succeeds", func(t *testing.T) {
-		var callCount atomic.Int32
-		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			n := callCount.Add(1)
-			if n == 1 {
-				w.WriteHeader(http.StatusNotFound)
-				w.Write([]byte(`{"message":"Folder not found"}`))
-				return
-			}
-			resp := CreateMetaResponse{UUID: TestFileUUID2, FileID: TestFileID}
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(resp)
-		}))
-		defer mockServer.Close()
-
-		cfg := newTestConfig(mockServer.URL)
-		result, err := CreateMetaFile(context.Background(), cfg,
-			TestFileNameNoExt, TestBucket1, &fileID, "03-aes",
-			TestFolderUUID, TestFileNameNoExt, "txt", 1024, time.Now())
-
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if result.UUID != TestFileUUID2 {
-			t.Errorf("expected UUID %s, got %s", TestFileUUID2, result.UUID)
-		}
-		if callCount.Load() != 2 {
-			t.Errorf("expected 2 calls (1 failure + 1 retry), got %d", callCount.Load())
-		}
-	})
-
-	t.Run("fails after retry on persistent 404", func(t *testing.T) {
-		var callCount atomic.Int32
-		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			callCount.Add(1)
-			w.WriteHeader(http.StatusNotFound)
-			w.Write([]byte(`{"message":"Folder not found"}`))
-		}))
-		defer mockServer.Close()
-
-		cfg := newTestConfig(mockServer.URL)
-		_, err := CreateMetaFile(context.Background(), cfg,
-			TestFileNameNoExt, TestBucket1, &fileID, "03-aes",
-			TestFolderUUID, TestFileNameNoExt, "txt", 1024, time.Now())
-
-		if err == nil {
-			t.Fatal("expected error after retry, got nil")
-		}
-		if callCount.Load() != 2 {
-			t.Errorf("expected 2 calls (1 failure + 1 retry), got %d", callCount.Load())
-		}
-	})
-
-	t.Run("does not retry on non-404 errors", func(t *testing.T) {
-		var callCount atomic.Int32
-		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			callCount.Add(1)
-			w.WriteHeader(http.StatusForbidden)
-			w.Write([]byte(`{"message":"Access denied"}`))
-		}))
-		defer mockServer.Close()
-
-		cfg := newTestConfig(mockServer.URL)
-		_, err := CreateMetaFile(context.Background(), cfg,
-			TestFileNameNoExt, TestBucket1, &fileID, "03-aes",
-			TestFolderUUID, TestFileNameNoExt, "txt", 1024, time.Now())
-
-		if err == nil {
-			t.Fatal("expected error, got nil")
-		}
-		if callCount.Load() != 1 {
-			t.Errorf("expected exactly 1 call (no retry), got %d", callCount.Load())
-		}
-	})
-
-	t.Run("respects context cancellation during retry wait", func(t *testing.T) {
-		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusNotFound)
-			w.Write([]byte(`{"message":"Folder not found"}`))
-		}))
-		defer mockServer.Close()
-
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-
-		cfg := newTestConfig(mockServer.URL)
-		_, err := CreateMetaFile(ctx, cfg,
-			TestFileNameNoExt, TestBucket1, &fileID, "03-aes",
-			TestFolderUUID, TestFileNameNoExt, "txt", 1024, time.Now())
-
-		if err == nil {
-			t.Fatal("expected error, got nil")
-		}
-	})
-}
