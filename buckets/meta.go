@@ -41,7 +41,30 @@ type CreateMetaResponse struct {
 	Created        string      `json:"created"`
 }
 
+// CreateMetaFile creates file metadata in Drive. If the server returns a 404
+// (folder not yet visible due to eventual consistency), it waits 500ms and
+// retries once before returning the error.
 func CreateMetaFile(ctx context.Context, cfg *config.Config, name, bucketID string, fileID *string, encryptVersion, folderUuid, plainName, fileType string, size int64, modTime time.Time) (*CreateMetaResponse, error) {
+	result, err := doCreateMetaFile(ctx, cfg, name, bucketID, fileID, encryptVersion, folderUuid, plainName, fileType, size, modTime)
+	if err == nil {
+		return result, nil
+	}
+
+	var httpErr *errors.HTTPError
+	if !stderrors.As(err, &httpErr) || httpErr.StatusCode() != http.StatusNotFound {
+		return nil, err
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-time.After(500 * time.Millisecond):
+	}
+
+	return doCreateMetaFile(ctx, cfg, name, bucketID, fileID, encryptVersion, folderUuid, plainName, fileType, size, modTime)
+}
+
+func doCreateMetaFile(ctx context.Context, cfg *config.Config, name, bucketID string, fileID *string, encryptVersion, folderUuid, plainName, fileType string, size int64, modTime time.Time) (*CreateMetaResponse, error) {
 	url := cfg.Endpoints.Drive().Files().Create()
 	reqBody := CreateMetaRequest{
 		Name:             name,
@@ -87,34 +110,4 @@ func CreateMetaFile(ctx context.Context, cfg *config.Config, name, bucketID stri
 		return nil, fmt.Errorf("failed to unmarshal create meta response: %w", err)
 	}
 	return &result, nil
-}
-
-// createMetaFileWithRetry wraps CreateMetaFile with exponential backoff
-// to handle eventual consistency where a newly created folder may not
-// be immediately available for file metadata operations.
-func createMetaFileWithRetry(ctx context.Context, cfg *config.Config, name, bucketID string, fileID *string, encryptVersion, folderUuid, plainName, fileType string, size int64, modTime time.Time) (*CreateMetaResponse, error) {
-	const maxRetries = 10
-	sleepTime := 100 * time.Millisecond
-
-	var lastErr error
-	for try := 1; try <= maxRetries; try++ {
-		meta, err := CreateMetaFile(ctx, cfg, name, bucketID, fileID, encryptVersion, folderUuid, plainName, fileType, size, modTime)
-		if err == nil {
-			return meta, nil
-		}
-		lastErr = err
-
-		var httpErr *errors.HTTPError
-		if !stderrors.As(err, &httpErr) || httpErr.StatusCode() != http.StatusNotFound {
-			return nil, err
-		}
-
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(sleepTime):
-		}
-		sleepTime *= 2
-	}
-	return nil, lastErr
 }
