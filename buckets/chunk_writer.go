@@ -1,6 +1,7 @@
 package buckets
 
 import (
+	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
@@ -27,6 +28,9 @@ type ChunkUploadSession struct {
 	totalSize  int64
 	chunkSize  int64
 	numParts   int64
+	fileKey    []byte
+	iv         []byte
+	aesBlock   cipher.Block
 }
 
 // NewChunkUploadSession initializes encryption and starts the multipart
@@ -44,10 +48,11 @@ func NewChunkUploadSession(ctx context.Context, cfg *config.Config, totalSize, c
 		return nil, fmt.Errorf("failed to generate file key: %w", err)
 	}
 
-	cipherStream, err := NewAES256CTRCipher(fileKey, iv)
+	block, err := aes.NewCipher(fileKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create cipher: %w", err)
+		return nil, fmt.Errorf("failed to create AES cipher: %w", err)
 	}
+	cipherStream := cipher.NewCTR(block, iv)
 
 	numParts := (totalSize + chunkSize - 1) / chunkSize
 	if totalSize == 0 {
@@ -62,6 +67,9 @@ func NewChunkUploadSession(ctx context.Context, cfg *config.Config, totalSize, c
 		totalSize:  totalSize,
 		chunkSize:  chunkSize,
 		numParts:   numParts,
+		fileKey:    fileKey,
+		iv:         iv,
+		aesBlock:   block,
 	}
 
 	specs := []UploadPartSpec{{Index: 0, Size: totalSize}}
@@ -123,6 +131,26 @@ func (s *ChunkUploadSession) Finish(ctx context.Context, parts []CompletedPart) 
 	}
 
 	return FinishMultipartUpload(ctx, s.cfg, s.cfg.Bucket, s.encIndex, shard)
+}
+
+// NewCipherAtOffset returns an AES-256-CTR cipher.Stream positioned at byteOffset.
+// Reuses the cached AES block cipher to avoid repeated key expansion.
+func (s *ChunkUploadSession) NewCipherAtOffset(byteOffset int64) cipher.Stream {
+	blockNum := byteOffset / int64(aes.BlockSize)
+	partialOffset := int(byteOffset % int64(aes.BlockSize))
+	adjustedIV := AddToIV(s.iv, blockNum)
+	stream := cipher.NewCTR(s.aesBlock, adjustedIV)
+	if partialOffset > 0 {
+		throwaway := make([]byte, partialOffset)
+		stream.XORKeyStream(throwaway, throwaway)
+	}
+	return stream
+}
+
+// HashEncryptedData feeds already-encrypted bytes into the session's SHA-256 hasher.
+// Caller must ensure data is fed in sequential byte order.
+func (s *ChunkUploadSession) HashEncryptedData(data []byte) {
+	s.sha256Hash.Write(data)
 }
 
 // URLs returns the presigned upload URLs for all parts

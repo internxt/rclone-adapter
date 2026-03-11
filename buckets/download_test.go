@@ -998,64 +998,57 @@ func TestGetStartByteAndEndByte(t *testing.T) {
 	}
 }
 
-func TestAdjustIV(t *testing.T) {
+func TestAddToIV(t *testing.T) {
 	t.Run("increment by one block", func(t *testing.T) {
 		iv := make([]byte, 16)
-		originalIV := make([]byte, 16)
-		copy(originalIV, iv)
 
-		adjustIV(iv, 1)
+		result := AddToIV(iv, 1)
 
-		// IV should be incremented by 1
 		expected := make([]byte, 16)
-		copy(expected, originalIV)
-		expected[15]++
+		expected[15] = 1
 
-		if !bytes.Equal(iv, expected) {
-			t.Errorf("expected IV to be incremented, got %v, expected %v", iv, expected)
+		if !bytes.Equal(result, expected) {
+			t.Errorf("expected IV to be incremented, got %v, expected %v", result, expected)
+		}
+		if !bytes.Equal(iv, make([]byte, 16)) {
+			t.Error("expected original IV to remain unchanged")
 		}
 	})
 
-	t.Run("increment by multiple blocks", func(t *testing.T) {
+	t.Run("carry-over on overflow", func(t *testing.T) {
 		iv := make([]byte, 16)
 		iv[15] = 255 // Set last byte to max to test carry-over
 
-		adjustIV(iv, 1)
+		result := AddToIV(iv, 1)
 
-		if iv[15] != 0 {
-			t.Errorf("expected last byte to wrap to 0, got %d", iv[15])
+		if result[15] != 0 {
+			t.Errorf("expected last byte to wrap to 0, got %d", result[15])
 		}
-		if iv[14] != 1 {
-			t.Errorf("expected second-to-last byte to increment, got %d", iv[14])
+		if result[14] != 1 {
+			t.Errorf("expected second-to-last byte to increment, got %d", result[14])
 		}
 	})
 
 	t.Run("increment by zero blocks", func(t *testing.T) {
 		iv := make([]byte, 16)
-		originalIV := make([]byte, 16)
-		copy(originalIV, iv)
 
-		adjustIV(iv, 0)
+		result := AddToIV(iv, 0)
 
-		if !bytes.Equal(iv, originalIV) {
+		if !bytes.Equal(result, iv) {
 			t.Error("expected IV to remain unchanged when incrementing by 0 blocks")
 		}
 	})
 
 	t.Run("increment by large number", func(t *testing.T) {
 		iv := make([]byte, 16)
-		originalIV := make([]byte, 16)
-		copy(originalIV, iv)
 
-		adjustIV(iv, 100)
+		result := AddToIV(iv, 100)
 
-		// IV should be incremented by 100
 		expected := make([]byte, 16)
-		copy(expected, originalIV)
-		expected[15] += 100
+		expected[15] = 100
 
-		if !bytes.Equal(iv, expected) {
-			t.Errorf("expected IV to be incremented by 100, got %v", iv)
+		if !bytes.Equal(result, expected) {
+			t.Errorf("expected IV to be incremented by 100, got %v", result)
 		}
 	})
 }
