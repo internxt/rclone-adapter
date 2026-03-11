@@ -13,6 +13,19 @@ import (
 	"golang.org/x/crypto/ripemd160"
 )
 
+// AddToIV adds n to iv as a big-endian 128-bit integer, returning a new slice.
+func AddToIV(iv []byte, n int64) []byte {
+	result := make([]byte, aes.BlockSize)
+	copy(result, iv)
+	carry := uint64(n)
+	for i := aes.BlockSize - 1; i >= 0 && carry > 0; i-- {
+		sum := uint64(result[i]) + carry
+		result[i] = byte(sum)
+		carry = sum >> 8
+	}
+	return result
+}
+
 // NewAES256CTRCipher returns a cipher.Stream that performs AES‑256‑CTR encryption
 // with the given 32‑byte key and 16‑byte IV, exactly like Node.js’s
 // createCipheriv('aes-256-ctr', key, iv).
