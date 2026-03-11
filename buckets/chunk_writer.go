@@ -28,9 +28,8 @@ type ChunkUploadSession struct {
 	totalSize  int64
 	chunkSize  int64
 	numParts   int64
-	fileKey    []byte
-	iv         []byte
-	aesBlock   cipher.Block
+	fileKey []byte
+	iv      []byte
 }
 
 // NewChunkUploadSession initializes encryption and starts the multipart
@@ -48,11 +47,10 @@ func NewChunkUploadSession(ctx context.Context, cfg *config.Config, totalSize, c
 		return nil, fmt.Errorf("failed to generate file key: %w", err)
 	}
 
-	block, err := aes.NewCipher(fileKey)
+	cipherStream, err := NewAES256CTRCipher(fileKey, iv)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create AES cipher: %w", err)
+		return nil, fmt.Errorf("failed to create cipher: %w", err)
 	}
-	cipherStream := cipher.NewCTR(block, iv)
 
 	numParts := (totalSize + chunkSize - 1) / chunkSize
 	if totalSize == 0 {
@@ -67,9 +65,8 @@ func NewChunkUploadSession(ctx context.Context, cfg *config.Config, totalSize, c
 		totalSize:  totalSize,
 		chunkSize:  chunkSize,
 		numParts:   numParts,
-		fileKey:    fileKey,
-		iv:         iv,
-		aesBlock:   block,
+		fileKey: fileKey,
+		iv:      iv,
 	}
 
 	specs := []UploadPartSpec{{Index: 0, Size: totalSize}}
@@ -134,17 +131,19 @@ func (s *ChunkUploadSession) Finish(ctx context.Context, parts []CompletedPart) 
 }
 
 // NewCipherAtOffset returns an AES-256-CTR cipher.Stream positioned at byteOffset.
-// Reuses the cached AES block cipher to avoid repeated key expansion.
-func (s *ChunkUploadSession) NewCipherAtOffset(byteOffset int64) cipher.Stream {
+func (s *ChunkUploadSession) NewCipherAtOffset(byteOffset int64) (cipher.Stream, error) {
 	blockNum := byteOffset / int64(aes.BlockSize)
 	partialOffset := int(byteOffset % int64(aes.BlockSize))
 	adjustedIV := AddToIV(s.iv, blockNum)
-	stream := cipher.NewCTR(s.aesBlock, adjustedIV)
+	stream, err := NewAES256CTRCipher(s.fileKey, adjustedIV)
+	if err != nil {
+		return nil, err
+	}
 	if partialOffset > 0 {
 		throwaway := make([]byte, partialOffset)
 		stream.XORKeyStream(throwaway, throwaway)
 	}
-	return stream
+	return stream, nil
 }
 
 // HashEncryptedData feeds already-encrypted bytes into the session's SHA-256 hasher.
