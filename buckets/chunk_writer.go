@@ -1,6 +1,7 @@
 package buckets
 
 import (
+	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
@@ -19,7 +20,6 @@ import (
 type ChunkUploadSession struct {
 	cfg        *config.Config
 	encIndex   string
-	cipherStrm cipher.Stream
 	sha256Hash hash.Hash
 	startResp  *StartUploadResp
 	uploadID   string
@@ -27,6 +27,8 @@ type ChunkUploadSession struct {
 	totalSize  int64
 	chunkSize  int64
 	numParts   int64
+	fileKey []byte
+	iv      []byte
 }
 
 // NewChunkUploadSession initializes encryption and starts the multipart
@@ -44,11 +46,6 @@ func NewChunkUploadSession(ctx context.Context, cfg *config.Config, totalSize, c
 		return nil, fmt.Errorf("failed to generate file key: %w", err)
 	}
 
-	cipherStream, err := NewAES256CTRCipher(fileKey, iv)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create cipher: %w", err)
-	}
-
 	numParts := (totalSize + chunkSize - 1) / chunkSize
 	if totalSize == 0 {
 		numParts = 0
@@ -57,11 +54,12 @@ func NewChunkUploadSession(ctx context.Context, cfg *config.Config, totalSize, c
 	s := &ChunkUploadSession{
 		cfg:        cfg,
 		encIndex:   plainIndex,
-		cipherStrm: cipherStream,
 		sha256Hash: sha256.New(),
 		totalSize:  totalSize,
 		chunkSize:  chunkSize,
 		numParts:   numParts,
+		fileKey: fileKey,
+		iv:      iv,
 	}
 
 	specs := []UploadPartSpec{{Index: 0, Size: totalSize}}
@@ -85,17 +83,8 @@ func NewChunkUploadSession(ctx context.Context, cfg *config.Config, totalSize, c
 	return s, nil
 }
 
-// EncryptingReader returns a reader that encrypts plaintext data using the
-// session's AES-256-CTR cipher and simultaneously feeds encrypted bytes into
-// the session's SHA-256 hasher. This reader MUST be consumed sequentially
-// to preserve CTR cipher ordering
-func (s *ChunkUploadSession) EncryptingReader(plaintext io.Reader) io.Reader {
-	encReader := cipher.StreamReader{S: s.cipherStrm, R: plaintext}
-	return io.TeeReader(encReader, s.sha256Hash)
-}
-
-// UploadChunk uploads already-encrypted data (from EncryptingReader) to the
-// presigned URL for the given partIndex. Returns the ETag from the server
+// UploadChunk uploads encrypted data to the presigned URL for the given
+// partIndex. Returns the ETag from the server
 func (s *ChunkUploadSession) UploadChunk(ctx context.Context, partIndex int, data io.ReadSeeker, size int64) (string, error) {
 	if partIndex < 0 || partIndex >= len(s.startResp.Uploads[0].URLs) {
 		return "", fmt.Errorf("part index %d out of range [0, %d)", partIndex, len(s.startResp.Uploads[0].URLs))
@@ -123,6 +112,29 @@ func (s *ChunkUploadSession) Finish(ctx context.Context, parts []CompletedPart) 
 	}
 
 	return FinishMultipartUpload(ctx, s.cfg, s.cfg.Bucket, s.encIndex, shard)
+}
+
+// NewCipherAtOffset returns an AES-256-CTR cipher.Stream positioned at byteOffset.
+// Handles both block-aligned and non-aligned offsets.
+func (s *ChunkUploadSession) NewCipherAtOffset(byteOffset int64) (cipher.Stream, error) {
+	blockNum := byteOffset / int64(aes.BlockSize)
+	adjustedIV := AddToIV(s.iv, blockNum)
+	stream, err := NewAES256CTRCipher(s.fileKey, adjustedIV)
+	if err != nil {
+		return nil, err
+	}
+
+	if partial := int(byteOffset % int64(aes.BlockSize)); partial > 0 {
+		throwaway := make([]byte, partial)
+		stream.XORKeyStream(throwaway, throwaway)
+	}
+	return stream, nil
+}
+
+// HashEncryptedData feeds already-encrypted bytes into the session's SHA-256 hasher.
+// Caller must ensure data is fed in sequential byte order.
+func (s *ChunkUploadSession) HashEncryptedData(data []byte) {
+	s.sha256Hash.Write(data)
 }
 
 // URLs returns the presigned upload URLs for all parts

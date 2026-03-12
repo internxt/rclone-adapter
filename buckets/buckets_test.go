@@ -2,6 +2,8 @@ package buckets
 
 import (
 	"bytes"
+	"crypto/aes"
+	"crypto/sha256"
 	"encoding/hex"
 	"io"
 	"testing"
@@ -245,6 +247,156 @@ func TestGenerateFileBucketKey(t *testing.T) {
 		}
 		if key == nil {
 			t.Fatal("expected key, got nil")
+		}
+	})
+}
+
+// newTestSession creates a minimal ChunkUploadSession with known key/IV for testing.
+// Does not start a real upload — only initializes crypto state.
+func newTestSession(t *testing.T) *ChunkUploadSession {
+	t.Helper()
+	key := make([]byte, 32)
+	iv := make([]byte, aes.BlockSize)
+	for i := range key {
+		key[i] = byte(i)
+	}
+	for i := range iv {
+		iv[i] = byte(i + 100)
+	}
+	return &ChunkUploadSession{
+		sha256Hash: sha256.New(),
+		fileKey:    key,
+		iv:         iv,
+	}
+}
+
+func TestNewCipherAtOffset(t *testing.T) {
+	t.Run("offset zero matches sequential cipher", func(t *testing.T) {
+		session := newTestSession(t)
+
+		stream, err := session.NewCipherAtOffset(0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		plaintext := []byte("hello world 1234")
+		ct1 := make([]byte, len(plaintext))
+		stream.XORKeyStream(ct1, plaintext)
+
+		seqStream, err := NewAES256CTRCipher(session.fileKey, session.iv)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		ct2 := make([]byte, len(plaintext))
+		seqStream.XORKeyStream(ct2, plaintext)
+
+		if !bytes.Equal(ct1, ct2) {
+			t.Errorf("offset-0 ciphertext differs from sequential cipher:\n  got  %x\n  want %x", ct1, ct2)
+		}
+	})
+
+	t.Run("offset N matches sequential cipher skipped to N", func(t *testing.T) {
+		session := newTestSession(t)
+
+		chunkSize := int64(aes.BlockSize) // 16 bytes per chunk
+		seqStream, _ := NewAES256CTRCipher(session.fileKey, session.iv)
+		block0 := make([]byte, chunkSize)
+		seqStream.XORKeyStream(block0, block0) // skip block 0
+		plaintext := []byte("second block!!!!")  // 16 bytes
+		seqCt := make([]byte, len(plaintext))
+		seqStream.XORKeyStream(seqCt, plaintext)
+
+		offsetStream, err := session.NewCipherAtOffset(chunkSize)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		offsetCt := make([]byte, len(plaintext))
+		offsetStream.XORKeyStream(offsetCt, plaintext)
+
+		if !bytes.Equal(seqCt, offsetCt) {
+			t.Errorf("offset ciphertext differs from sequential:\n  got  %x\n  want %x", offsetCt, seqCt)
+		}
+	})
+
+	t.Run("large offset matches sequential", func(t *testing.T) {
+		session := newTestSession(t)
+		offset := int64(1000 * aes.BlockSize)
+
+		seqStream, _ := NewAES256CTRCipher(session.fileKey, session.iv)
+		discard := make([]byte, offset)
+		seqStream.XORKeyStream(discard, discard)
+		plaintext := []byte("data after 1000 blocks!!")
+		seqCt := make([]byte, len(plaintext))
+		seqStream.XORKeyStream(seqCt, plaintext)
+
+		offsetStream, err := session.NewCipherAtOffset(offset)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		offsetCt := make([]byte, len(plaintext))
+		offsetStream.XORKeyStream(offsetCt, plaintext)
+
+		if !bytes.Equal(seqCt, offsetCt) {
+			t.Errorf("large-offset ciphertext mismatch:\n  got  %x\n  want %x", offsetCt, seqCt)
+		}
+	})
+
+	t.Run("non-block-aligned offset matches sequential", func(t *testing.T) {
+		session := newTestSession(t)
+		// Simulate a chunk size that is not a multiple of aes.BlockSize (e.g., 100003 bytes)
+		offset := int64(100003)
+
+		seqStream, _ := NewAES256CTRCipher(session.fileKey, session.iv)
+		discard := make([]byte, offset)
+		seqStream.XORKeyStream(discard, discard)
+		plaintext := []byte("data at non-aligned offset!!")
+		seqCt := make([]byte, len(plaintext))
+		seqStream.XORKeyStream(seqCt, plaintext)
+
+		offsetStream, err := session.NewCipherAtOffset(offset)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		offsetCt := make([]byte, len(plaintext))
+		offsetStream.XORKeyStream(offsetCt, plaintext)
+
+		if !bytes.Equal(seqCt, offsetCt) {
+			t.Errorf("non-aligned offset ciphertext mismatch:\n  got  %x\n  want %x", offsetCt, seqCt)
+		}
+	})
+}
+
+func TestHashEncryptedData(t *testing.T) {
+	t.Run("matches sha256 of same data", func(t *testing.T) {
+		session := newTestSession(t)
+
+		data := []byte("some encrypted data to hash")
+		session.HashEncryptedData(data)
+
+		got := session.sha256Hash.Sum(nil)
+		want := sha256.Sum256(data)
+
+		if !bytes.Equal(got, want[:]) {
+			t.Errorf("hash mismatch:\n  got  %x\n  want %x", got, want)
+		}
+	})
+
+	t.Run("accumulates across multiple calls", func(t *testing.T) {
+		session := newTestSession(t)
+
+		chunk1 := []byte("first chunk")
+		chunk2 := []byte("second chunk")
+		session.HashEncryptedData(chunk1)
+		session.HashEncryptedData(chunk2)
+
+		got := session.sha256Hash.Sum(nil)
+
+		h := sha256.New()
+		h.Write(chunk1)
+		h.Write(chunk2)
+		want := h.Sum(nil)
+
+		if !bytes.Equal(got, want) {
+			t.Errorf("accumulated hash mismatch:\n  got  %x\n  want %x", got, want)
 		}
 	})
 }
