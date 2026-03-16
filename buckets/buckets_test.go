@@ -261,7 +261,7 @@ func newTestSession(t *testing.T) *ChunkUploadSession {
 		key[i] = byte(i)
 	}
 	for i := range iv {
-		iv[i] = byte(i + 100)
+		iv[i] = byte(i) + TestIVOffset
 	}
 	return &ChunkUploadSession{
 		sha256Hash: sha256.New(),
