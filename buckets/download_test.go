@@ -1042,13 +1042,13 @@ func TestAddToIV(t *testing.T) {
 	t.Run("increment by large number", func(t *testing.T) {
 		iv := make([]byte, 16)
 
-		result := AddToIV(iv, 100)
+		result := AddToIV(iv, int64(TestIVOffset))
 
 		expected := make([]byte, 16)
-		expected[15] = 100
+		expected[15] += TestIVOffset
 
 		if !bytes.Equal(result, expected) {
-			t.Errorf("expected IV to be incremented by 100, got %v", result)
+			t.Errorf("expected IV to be incremented by %d, got %v", TestIVOffset, result)
 		}
 	})
 }
