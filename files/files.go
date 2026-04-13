@@ -164,6 +164,46 @@ func RenameFile(ctx context.Context, cfg *config.Config, fileUUID, newPlainName,
 	return nil
 }
 
+// MoveFile moves a file to a new destination folder, optionally renaming it.
+// If newName or newType are empty, they are omitted and the server keeps the current values.
+func MoveFile(ctx context.Context, cfg *config.Config, fileUUID, destinationFolderUUID, newName, newType string) error {
+	endpoint := cfg.Endpoints.Drive().Files().Move(fileUUID)
+
+	payload := map[string]string{
+		"destinationFolder": destinationFolderUUID,
+	}
+	if newName != "" {
+		payload["name"] = newName
+	}
+	if newType != "" {
+		payload["type"] = newType
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal move file request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create move file request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+cfg.Token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := cfg.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to execute move file request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.NewHTTPError(resp, "move file")
+	}
+
+	return nil
+}
+
 func GetFileMeta(ctx context.Context, cfg *config.Config, fileUUID string) (*FileMeta, error) {
 	endpoint := cfg.Endpoints.Drive().Files().Meta(fileUUID)
 

@@ -213,6 +213,136 @@ func TestRenameFile(t *testing.T) {
 	}
 }
 
+func TestMoveFile(t *testing.T) {
+	testCases := []struct {
+		name                  string
+		fileUUID              string
+		destinationFolderUUID string
+		newName               string
+		newType               string
+		mockStatusCode        int
+		expectError           bool
+		errorContains         string
+	}{
+		{
+			name:                  "successful move with rename",
+			fileUUID:              buckets.TestFileUUID,
+			destinationFolderUUID: "dest-folder-uuid",
+			newName:               "new-name",
+			newType:               "pdf",
+			mockStatusCode:        http.StatusOK,
+			expectError:           false,
+		},
+		{
+			name:                  "successful move without rename",
+			fileUUID:              buckets.TestFileUUID,
+			destinationFolderUUID: "dest-folder-uuid",
+			newName:               "",
+			newType:               "",
+			mockStatusCode:        http.StatusOK,
+			expectError:           false,
+		},
+		{
+			name:                  "unauthorized - 401",
+			fileUUID:              buckets.TestFileUUID,
+			destinationFolderUUID: "dest-folder-uuid",
+			newName:               "",
+			newType:               "",
+			mockStatusCode:        http.StatusUnauthorized,
+			expectError:           true,
+			errorContains:         "401",
+		},
+		{
+			name:                  "not found - 404",
+			fileUUID:              "non-existent-uuid",
+			destinationFolderUUID: "dest-folder-uuid",
+			newName:               "",
+			newType:               "",
+			mockStatusCode:        http.StatusNotFound,
+			expectError:           true,
+			errorContains:         "404",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var capturedPayload map[string]string
+
+			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != "PATCH" {
+					t.Errorf("expected PATCH request, got %s", r.Method)
+				}
+
+				authHeader := r.Header.Get("Authorization")
+				if !strings.HasPrefix(authHeader, "Bearer ") {
+					t.Error("expected Authorization header with Bearer token")
+				}
+
+				if r.Header.Get("Content-Type") != "application/json" {
+					t.Errorf("expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
+				}
+
+				if !strings.Contains(r.URL.Path, tc.fileUUID) {
+					t.Errorf("expected path to contain %s, got %s", tc.fileUUID, r.URL.Path)
+				}
+
+				if err := json.NewDecoder(r.Body).Decode(&capturedPayload); err != nil {
+					t.Errorf("failed to decode request body: %v", err)
+				}
+
+				w.WriteHeader(tc.mockStatusCode)
+				if tc.mockStatusCode == http.StatusOK {
+					w.Write([]byte("{}"))
+				} else {
+					w.Write([]byte("error message"))
+				}
+			}))
+			defer mockServer.Close()
+
+			cfg := newTestConfig(mockServer.URL)
+
+			err := MoveFile(context.Background(), cfg, tc.fileUUID, tc.destinationFolderUUID, tc.newName, tc.newType)
+
+			if tc.expectError {
+				if err == nil {
+					t.Error("expected error, got nil")
+				}
+				if tc.errorContains != "" && !strings.Contains(err.Error(), tc.errorContains) {
+					t.Errorf("expected error to contain %q, got %q", tc.errorContains, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+
+				if capturedPayload["destinationFolder"] != tc.destinationFolderUUID {
+					t.Errorf("expected destinationFolder %s, got %s", tc.destinationFolderUUID, capturedPayload["destinationFolder"])
+				}
+
+				if tc.newName != "" {
+					if capturedPayload["name"] != tc.newName {
+						t.Errorf("expected name %s, got %s", tc.newName, capturedPayload["name"])
+					}
+				} else {
+					if _, ok := capturedPayload["name"]; ok {
+						t.Error("expected name field to be omitted when empty, but it was present")
+					}
+				}
+
+				if tc.newType != "" {
+					if capturedPayload["type"] != tc.newType {
+						t.Errorf("expected type %s, got %s", tc.newType, capturedPayload["type"])
+					}
+				} else {
+					if _, ok := capturedPayload["type"]; ok {
+						t.Error("expected type field to be omitted when empty, but it was present")
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestCheckFilesExistence(t *testing.T) {
 	testCases := []struct {
 		name           string
