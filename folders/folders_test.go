@@ -270,6 +270,146 @@ func TestDeleteFolder(t *testing.T) {
 	})
 }
 
+func TestRenameFolder(t *testing.T) {
+	t.Run("successful rename", func(t *testing.T) {
+		var capturedPayload map[string]string
+
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "PUT" {
+				t.Errorf("expected PUT request, got %s", r.Method)
+			}
+
+			if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
+				t.Error("expected Authorization header with Bearer token")
+			}
+
+			if !strings.Contains(r.URL.Path, "test-uuid") || !strings.Contains(r.URL.Path, "/meta") {
+				t.Errorf("expected path to contain test-uuid and /meta, got %s", r.URL.Path)
+			}
+
+			if err := json.NewDecoder(r.Body).Decode(&capturedPayload); err != nil {
+				t.Errorf("failed to decode request body: %v", err)
+			}
+
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer mockServer.Close()
+
+		cfg := newTestConfig(mockServer.URL)
+
+		err := RenameFolder(context.Background(), cfg, "test-uuid", "new-folder-name")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if capturedPayload["plainName"] != "new-folder-name" {
+			t.Errorf("expected plainName new-folder-name, got %s", capturedPayload["plainName"])
+		}
+	})
+
+	t.Run("error - 404 not found", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte("not found"))
+		}))
+		defer mockServer.Close()
+
+		cfg := newTestConfig(mockServer.URL)
+
+		err := RenameFolder(context.Background(), cfg, "non-existent-uuid", "new-name")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "404") {
+			t.Errorf("expected error to contain 404, got %v", err)
+		}
+	})
+}
+
+func TestMoveFolder(t *testing.T) {
+	t.Run("successful move with rename", func(t *testing.T) {
+		var capturedPayload map[string]string
+
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "PATCH" {
+				t.Errorf("expected PATCH request, got %s", r.Method)
+			}
+
+			if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
+				t.Error("expected Authorization header with Bearer token")
+			}
+
+			if !strings.Contains(r.URL.Path, "test-uuid") {
+				t.Errorf("expected path to contain test-uuid, got %s", r.URL.Path)
+			}
+
+			if err := json.NewDecoder(r.Body).Decode(&capturedPayload); err != nil {
+				t.Errorf("failed to decode request body: %v", err)
+			}
+
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("{}"))
+		}))
+		defer mockServer.Close()
+
+		cfg := newTestConfig(mockServer.URL)
+
+		err := MoveFolder(context.Background(), cfg, "test-uuid", "dest-folder-uuid", "new-name")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if capturedPayload["destinationFolder"] != "dest-folder-uuid" {
+			t.Errorf("expected destinationFolder dest-folder-uuid, got %s", capturedPayload["destinationFolder"])
+		}
+		if capturedPayload["name"] != "new-name" {
+			t.Errorf("expected name new-name, got %s", capturedPayload["name"])
+		}
+	})
+
+	t.Run("successful move without rename", func(t *testing.T) {
+		var capturedPayload map[string]string
+
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if err := json.NewDecoder(r.Body).Decode(&capturedPayload); err != nil {
+				t.Errorf("failed to decode request body: %v", err)
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("{}"))
+		}))
+		defer mockServer.Close()
+
+		cfg := newTestConfig(mockServer.URL)
+
+		err := MoveFolder(context.Background(), cfg, "test-uuid", "dest-folder-uuid", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if _, ok := capturedPayload["name"]; ok {
+			t.Error("expected name field to be omitted when empty, but it was present")
+		}
+	})
+
+	t.Run("error - 404 not found", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte("not found"))
+		}))
+		defer mockServer.Close()
+
+		cfg := newTestConfig(mockServer.URL)
+
+		err := MoveFolder(context.Background(), cfg, "non-existent-uuid", "dest-folder-uuid", "")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "404") {
+			t.Errorf("expected error to contain 404, got %v", err)
+		}
+	})
+}
+
 func TestListFolders(t *testing.T) {
 	t.Run("successful list with default values", func(t *testing.T) {
 		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
