@@ -116,6 +116,11 @@ func (f *FileEndpoints) Thumbnail() string {
 	return u
 }
 
+func (f *FileEndpoints) Limits() string {
+	u, _ := url.JoinPath(f.base, "/limits")
+	return u
+}
+
 // FolderEndpoints : endpoints under /drive/folders
 type FolderEndpoints struct {
 	base string
