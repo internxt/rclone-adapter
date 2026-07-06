@@ -199,14 +199,12 @@ func TestRenameFile(t *testing.T) {
 					t.Errorf("expected plainName %s, got %s", tc.newPlainName, capturedPayload["plainName"])
 				}
 
-				if tc.newType != "" {
-					if capturedPayload["type"] != tc.newType {
-						t.Errorf("expected type %s, got %s", tc.newType, capturedPayload["type"])
-					}
-				} else {
-					if _, ok := capturedPayload["type"]; ok {
-						t.Error("expected type field to be omitted when empty, but it was present")
-					}
+				gotType, ok := capturedPayload["type"]
+				if !ok {
+					t.Error("expected type field to always be present")
+				}
+				if gotType != tc.newType {
+					t.Errorf("expected type %q, got %q", tc.newType, gotType)
 				}
 			}
 		})
@@ -238,6 +236,15 @@ func TestMoveFile(t *testing.T) {
 			fileUUID:              buckets.TestFileUUID,
 			destinationFolderUUID: "dest-folder-uuid",
 			newName:               "",
+			newType:               "",
+			mockStatusCode:        http.StatusOK,
+			expectError:           false,
+		},
+		{
+			name:                  "successful rename clearing extension",
+			fileUUID:              buckets.TestFileUUID,
+			destinationFolderUUID: "dest-folder-uuid",
+			newName:               "new-name",
 			newType:               "",
 			mockStatusCode:        http.StatusOK,
 			expectError:           false,
@@ -323,19 +330,19 @@ func TestMoveFile(t *testing.T) {
 					if capturedPayload["name"] != tc.newName {
 						t.Errorf("expected name %s, got %s", tc.newName, capturedPayload["name"])
 					}
+					gotType, ok := capturedPayload["type"]
+					if !ok {
+						t.Error("expected type field to be present when renaming")
+					}
+					if gotType != tc.newType {
+						t.Errorf("expected type %q, got %q", tc.newType, gotType)
+					}
 				} else {
 					if _, ok := capturedPayload["name"]; ok {
 						t.Error("expected name field to be omitted when empty, but it was present")
 					}
-				}
-
-				if tc.newType != "" {
-					if capturedPayload["type"] != tc.newType {
-						t.Errorf("expected type %s, got %s", tc.newType, capturedPayload["type"])
-					}
-				} else {
 					if _, ok := capturedPayload["type"]; ok {
-						t.Error("expected type field to be omitted when empty, but it was present")
+						t.Error("expected type field to be omitted on a pure move, but it was present")
 					}
 				}
 			}

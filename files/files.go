@@ -128,15 +128,13 @@ func DeleteFile(ctx context.Context, cfg *config.Config, uuid string) error {
 	return nil
 }
 
-// RenameFile renames a file by UUID with the given new name and optional type.
+// RenameFile renames a file by UUID with the given new name and type.
 func RenameFile(ctx context.Context, cfg *config.Config, fileUUID, newPlainName, newType string) error {
 	endpoint := cfg.Endpoints.Drive().Files().Meta(fileUUID)
 
 	payload := map[string]string{
 		"plainName": newPlainName,
-	}
-	if newType != "" {
-		payload["type"] = newType
+		"type":      newType,
 	}
 
 	body, err := json.Marshal(payload)
@@ -165,7 +163,11 @@ func RenameFile(ctx context.Context, cfg *config.Config, fileUUID, newPlainName,
 }
 
 // MoveFile moves a file to a new destination folder, optionally renaming it.
-// If newName or newType are empty, they are omitted and the server keeps the current values.
+//
+// If newName is empty it is omitted and the server keeps the current name.
+// newType, however, is always sent whenever a rename is requested, so passing
+// an empty string clears the file's extension (e.g. "foo.txt" -> "foo").
+// Omitting it would leave the old extension in place on the server.
 func MoveFile(ctx context.Context, cfg *config.Config, fileUUID, destinationFolderUUID, newName, newType string) error {
 	endpoint := cfg.Endpoints.Drive().Files().Move(fileUUID)
 
@@ -174,8 +176,6 @@ func MoveFile(ctx context.Context, cfg *config.Config, fileUUID, destinationFold
 	}
 	if newName != "" {
 		payload["name"] = newName
-	}
-	if newType != "" {
 		payload["type"] = newType
 	}
 
