@@ -604,7 +604,7 @@ func TestUploadFileNameParsing(t *testing.T) {
 		{"simple.txt", "simple", "txt"},
 		{"multiple.dots.tar.gz", "multiple.dots.tar", "gz"},
 		{"noextension", "noextension", ""},
-		{".hidden", "", "hidden"},
+		{".hidden", ".hidden", ""},
 	}
 
 	for _, tc := range testCases {
@@ -1428,7 +1428,7 @@ func TestUploadFileStream_EmptyFile_ViaStreamAuto(t *testing.T) {
 	}{
 		{"simple empty file", "empty.txt", "empty", "txt"},
 		{"empty file no extension", "emptyfile", "emptyfile", ""},
-		{"empty hidden file", ".hidden", "", "hidden"},
+		{"empty hidden file", ".hidden", ".hidden", ""},
 	}
 
 	for _, tc := range testCases {
