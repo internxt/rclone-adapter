@@ -168,168 +168,145 @@ func MoveFolder(ctx context.Context, cfg *config.Config, folderUUID, destination
 	return nil
 }
 
-// ListFolders lists child folders under the given parent UUID.
-// Returns a slice of folders or error otherwise
-func ListFolders(ctx context.Context, cfg *config.Config, parentUUID string, opts ListOptions) ([]Folder, error) {
+// ListFolders lists one page of child folders under the given parent UUID,
+// sorted by plainName. Only existing folders are returned.
+// It returns the folders and the cursor for the next page, which is empty
+// when there are no more pages.
+func ListFolders(ctx context.Context, cfg *config.Config, parentUUID string, opts ListOptions) ([]Folder, string, error) {
+	return listPage[Folder](ctx, cfg, parentUUID, cfg.Endpoints.Drive().Folders().ContentFolders(parentUUID), "folders", opts)
+}
+
+// ListFiles lists one page of files under the given parent folder UUID,
+// sorted by plainName. Only existing files are returned.
+// It returns the files and the cursor for the next page, which is empty
+// when there are no more pages.
+func ListFiles(ctx context.Context, cfg *config.Config, parentUUID string, opts ListOptions) ([]File, string, error) {
+	return listPage[File](ctx, cfg, parentUUID, cfg.Endpoints.Drive().Folders().ContentFiles(parentUUID), "files", opts)
+}
+
+// listPage fetches one page from a cursor paginated content endpoint whose
+// response holds the items under key and the next page cursor.
+func listPage[T any](ctx context.Context, cfg *config.Config, parentUUID, endpoint, key string, opts ListOptions) ([]T, string, error) {
 	if err := consistency.AwaitFolder(ctx, parentUUID); err != nil {
-		return nil, err
+		return nil, "", err
 	}
+	op := "list " + key
 
-	base := cfg.Endpoints.Drive().Folders().ContentFolders(parentUUID)
-	u, err := url.Parse(base)
+	u, err := listURL(endpoint, opts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse list folders URL: %w", err)
+		return nil, "", fmt.Errorf("failed to parse %s URL: %w", op, err)
 	}
-	q := u.Query()
 
-	limit := opts.Limit
-	if limit <= 0 {
-		limit = 50
-	}
-	offset := opts.Offset
-	if offset < 0 {
-		offset = 0
-	}
-	sortField := opts.Sort
-	if sortField == "" {
-		sortField = "plainName"
-	}
-	order := opts.Order
-	if order == "" {
-		order = "ASC"
-	}
-	q.Set("offset", strconv.Itoa(offset))
-	q.Set("limit", strconv.Itoa(limit))
-	q.Set("sort", sortField)
-	q.Set("order", order)
-
-	u.RawQuery = q.Encode()
-
-	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create list folders request: %w", err)
+		return nil, "", fmt.Errorf("failed to create %s request: %w", op, err)
 	}
 	req.Header.Set("Authorization", "Bearer "+cfg.Token)
 	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute list folders request: %w", err)
+		return nil, "", fmt.Errorf("failed to execute %s request: %w", op, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.NewHTTPError(resp, "list folders")
+		return nil, "", errors.NewHTTPError(resp, op)
 	}
 
-	var wrapper struct {
-		Folders []Folder `json:"folders"`
+	var body map[string]json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, "", fmt.Errorf("failed to decode %s response: %w", op, err)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&wrapper); err != nil {
-		return nil, fmt.Errorf("failed to decode list folders response: %w", err)
+	var items []T
+	if raw := body[key]; raw != nil {
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.UseNumber()
+		if err := dec.Decode(&items); err != nil {
+			return nil, "", fmt.Errorf("failed to decode %s response: %w", op, err)
+		}
 	}
-	return wrapper.Folders, nil
+	if items == nil {
+		return nil, "", fmt.Errorf("%s response is missing the %s array", op, key)
+	}
+	var next string
+	if raw := body["nextCursor"]; raw != nil {
+		if err := json.Unmarshal(raw, &next); err != nil {
+			return nil, "", fmt.Errorf("failed to decode %s response: %w", op, err)
+		}
+	}
+	return items, next, nil
 }
 
-// ListFiles lists files under the given parent folder UUID.
-// Returns a slice of files or error otherwise
-func ListFiles(ctx context.Context, cfg *config.Config, parentUUID string, opts ListOptions) ([]File, error) {
-	if err := consistency.AwaitFolder(ctx, parentUUID); err != nil {
-		return nil, err
-	}
-
-	base := cfg.Endpoints.Drive().Folders().ContentFiles(parentUUID)
-	u, err := url.Parse(base)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse list files URL: %w", err)
-	}
-	q := u.Query()
-
-	limit := opts.Limit
-	if limit <= 0 {
-		limit = 50
-	}
-	offset := opts.Offset
-	if offset < 0 {
-		offset = 0
-	}
-	sortField := opts.Sort
-	if sortField == "" {
-		sortField = "plainName"
-	}
-	order := opts.Order
-	if order == "" {
-		order = "ASC"
-	}
-	q.Set("offset", strconv.Itoa(offset))
-	q.Set("limit", strconv.Itoa(limit))
-	q.Set("sort", sortField)
-	q.Set("order", order)
-
-	u.RawQuery = q.Encode()
-
-	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create list files request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+cfg.Token)
-	resp, err := cfg.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute list files request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, errors.NewHTTPError(resp, "list files")
-	}
-
-	var wrapper struct {
-		Files []File `json:"files"`
-	}
-	dec := json.NewDecoder(resp.Body)
-	dec.UseNumber()
-	if err := dec.Decode(&wrapper); err != nil {
-		return nil, fmt.Errorf("failed to decode list files response: %w", err)
-	}
-	return wrapper.Files, nil
-}
-
-// This function will get all of the files in a folder, getting 50 at a time until completed
+// ListAllFiles gets all of the files in a folder, following the cursor until
+// the last page.
 func ListAllFiles(ctx context.Context, cfg *config.Config, parentUUID string) ([]File, error) {
-	var outFiles []File
-	offset := 0
-	loops := 0
-	maxLoops := 10000 //Find sane number...
-	for {
-		files, err := ListFiles(ctx, cfg, parentUUID, ListOptions{Offset: offset})
-		if err != nil {
-			return nil, fmt.Errorf("failed to list all files at offset %d: %w", offset, err)
-		}
-		outFiles = append(outFiles, files...)
-		offset += 50
-		loops += 1
-		if len(files) != 50 || loops >= maxLoops {
-			break
-		}
+	files, err := listAllPages(func(cursor string) ([]File, string, error) {
+		return ListFiles(ctx, cfg, parentUUID, ListOptions{Cursor: cursor})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list all files: %w", err)
 	}
-	return outFiles, nil
+	return files, nil
 }
 
-// This function will get all of the folders in a folder, getting 50 at a time until completed
+// ListAllFolders gets all of the folders in a folder, following the cursor
+// until the last page.
 func ListAllFolders(ctx context.Context, cfg *config.Config, parentUUID string) ([]Folder, error) {
-	var outFolders []Folder
-	offset := 0
-	loops := 0
-	maxLoops := 10000 //Find sane number...
-	for {
-		files, err := ListFolders(ctx, cfg, parentUUID, ListOptions{Offset: offset})
-		if err != nil {
-			return nil, fmt.Errorf("failed to list all folders at offset %d: %w", offset, err)
-		}
-		outFolders = append(outFolders, files...)
-		offset += 50
-		loops += 1
-		if len(files) != 50 || loops >= maxLoops {
-			break
-		}
+	folders, err := listAllPages(func(cursor string) ([]Folder, string, error) {
+		return ListFolders(ctx, cfg, parentUUID, ListOptions{Cursor: cursor})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list all folders: %w", err)
 	}
-	return outFolders, nil
+	return folders, nil
+}
+
+// listAllPages calls fetchPage with the cursor of the previous page until no
+// cursor is returned. A repeated cursor is treated as an error so a
+// misbehaving server cannot make it loop forever.
+func listAllPages[T any](fetchPage func(cursor string) ([]T, string, error)) ([]T, error) {
+	var all []T
+	var cursor string
+	seen := make(map[string]struct{})
+	for page := 0; ; page++ {
+		items, next, err := fetchPage(cursor)
+		if err != nil {
+			return nil, fmt.Errorf("page %d: %w", page, err)
+		}
+		all = append(all, items...)
+		if next == "" {
+			return all, nil
+		}
+		if _, ok := seen[next]; ok {
+			return nil, fmt.Errorf("page %d: server returned an already visited cursor", page)
+		}
+		seen[next] = struct{}{}
+		cursor = next
+	}
+}
+
+// listURL builds a cursor paginated list URL from base and opts.
+func listURL(base string, opts ListOptions) (string, error) {
+	u, err := url.Parse(base)
+	if err != nil {
+		return "", err
+	}
+
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = MaxPageSize
+	}
+	limit = min(max(limit, MinPageSize), MaxPageSize)
+	order := opts.Order
+	if order == "" {
+		order = "ASC"
+	}
+
+	q := u.Query()
+	q.Set("limit", strconv.Itoa(limit))
+	q.Set("order", order)
+	if opts.Cursor != "" {
+		q.Set("cursor", opts.Cursor)
+	}
+	u.RawQuery = q.Encode()
+	return u.String(), nil
 }

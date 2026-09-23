@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -410,43 +412,55 @@ func TestMoveFolder(t *testing.T) {
 	})
 }
 
+// cursorPage writes the page of items that starts at the offset encoded in the
+// request cursor, with a nextCursor pointing to the following page.
+func cursorPage[T any](w http.ResponseWriter, r *http.Request, key string, items []T, pageSize int) {
+	start := 0
+	if c := r.URL.Query().Get("cursor"); c != "" {
+		start, _ = strconv.Atoi(c)
+	}
+	end := min(start+pageSize, len(items))
+	var next *string
+	if end < len(items) {
+		n := strconv.Itoa(end)
+		next = &n
+	}
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]any{key: items[start:end], "nextCursor": next})
+}
+
 func TestListFolders(t *testing.T) {
 	t.Run("successful list with default values", func(t *testing.T) {
 		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != "GET" {
 				t.Errorf("expected GET request, got %s", r.Method)
 			}
+			if r.URL.Path != "/drive/folders/v2/content/parent-uuid/folders" {
+				t.Errorf("unexpected path %s", r.URL.Path)
+			}
 
 			query := r.URL.Query()
-			if query.Get("offset") != "0" {
-				t.Errorf("expected offset 0, got %s", query.Get("offset"))
+			if query.Has("offset") || query.Has("sort") {
+				t.Errorf("expected no offset/sort params, got %s", r.URL.RawQuery)
 			}
-			if query.Get("limit") != "50" {
-				t.Errorf("expected limit 50, got %s", query.Get("limit"))
+			if query.Has("cursor") {
+				t.Errorf("expected no cursor on first page, got %s", query.Get("cursor"))
 			}
-			if query.Get("sort") != "plainName" {
-				t.Errorf("expected sort plainName, got %s", query.Get("sort"))
+			if query.Get("limit") != "1000" {
+				t.Errorf("expected limit 1000, got %s", query.Get("limit"))
 			}
 			if query.Get("order") != "ASC" {
 				t.Errorf("expected order ASC, got %s", query.Get("order"))
 			}
 
-			response := struct {
-				Folders []Folder `json:"folders"`
-			}{
-				Folders: []Folder{
-					{UUID: "folder-1", PlainName: "folder1"},
-					{UUID: "folder-2", PlainName: "folder2"},
-				},
-			}
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(response)
+			w.Write([]byte(`{"folders":[{"uuid":"folder-1","plainName":"folder1"},{"uuid":"folder-2","plainName":"folder2"}],"nextCursor":"abc"}`))
 		}))
 		defer mockServer.Close()
 
 		cfg := newTestConfig(mockServer.URL)
 
-		folders, err := ListFolders(context.Background(), cfg, "parent-uuid", ListOptions{})
+		folders, next, err := ListFolders(context.Background(), cfg, "parent-uuid", ListOptions{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -454,77 +468,43 @@ func TestListFolders(t *testing.T) {
 		if len(folders) != 2 {
 			t.Errorf("expected 2 folders, got %d", len(folders))
 		}
+		if next != "abc" {
+			t.Errorf("expected next cursor abc, got %q", next)
+		}
 	})
 
-	t.Run("successful list with custom pagination", func(t *testing.T) {
+	t.Run("successful list with custom options", func(t *testing.T) {
 		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			query := r.URL.Query()
-			if query.Get("offset") != "10" {
-				t.Errorf("expected offset 10, got %s", query.Get("offset"))
+			if query.Get("cursor") != "abc" {
+				t.Errorf("expected cursor abc, got %s", query.Get("cursor"))
 			}
-			if query.Get("limit") != "25" {
-				t.Errorf("expected limit 25, got %s", query.Get("limit"))
-			}
-			if query.Get("sort") != "createdAt" {
-				t.Errorf("expected sort createdAt, got %s", query.Get("sort"))
+			if query.Get("limit") != "75" {
+				t.Errorf("expected limit 75, got %s", query.Get("limit"))
 			}
 			if query.Get("order") != "DESC" {
 				t.Errorf("expected order DESC, got %s", query.Get("order"))
 			}
 
-			response := struct {
-				Folders []Folder `json:"folders"`
-			}{
-				Folders: []Folder{{UUID: "folder-1"}},
-			}
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(response)
+			w.Write([]byte(`{"folders":[{"uuid":"folder-1"}],"nextCursor":null}`))
 		}))
 		defer mockServer.Close()
 
 		cfg := newTestConfig(mockServer.URL)
 
 		opts := ListOptions{
-			Offset: 10,
-			Limit:  25,
-			Sort:   "createdAt",
+			Cursor: "abc",
+			Limit:  75,
 			Order:  "DESC",
 		}
 
-		_, err := ListFolders(context.Background(), cfg, "parent-uuid", opts)
+		_, next, err := ListFolders(context.Background(), cfg, "parent-uuid", opts)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-	})
-
-	t.Run("default values for negative/zero limits", func(t *testing.T) {
-		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			query := r.URL.Query()
-			if query.Get("limit") != "50" {
-				t.Errorf("expected limit 50 (default), got %s", query.Get("limit"))
-			}
-			if query.Get("offset") != "0" {
-				t.Errorf("expected offset 0 (default for negative), got %s", query.Get("offset"))
-			}
-
-			response := struct {
-				Folders []Folder `json:"folders"`
-			}{Folders: []Folder{}}
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(response)
-		}))
-		defer mockServer.Close()
-
-		cfg := newTestConfig(mockServer.URL)
-
-		opts := ListOptions{
-			Limit:  -5,  // Should default to 50
-			Offset: -10, // Should default to 0
-		}
-
-		_, err := ListFolders(context.Background(), cfg, "parent-uuid", opts)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+		if next != "" {
+			t.Errorf("expected empty next cursor on last page, got %q", next)
 		}
 	})
 
@@ -537,7 +517,7 @@ func TestListFolders(t *testing.T) {
 
 		cfg := newTestConfig(mockServer.URL)
 
-		_, err := ListFolders(context.Background(), cfg, "parent-uuid", ListOptions{})
+		_, _, err := ListFolders(context.Background(), cfg, "parent-uuid", ListOptions{})
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -555,7 +535,7 @@ func TestListFolders(t *testing.T) {
 
 		cfg := newTestConfig(mockServer.URL)
 
-		_, err := ListFolders(context.Background(), cfg, "parent-uuid", ListOptions{})
+		_, _, err := ListFolders(context.Background(), cfg, "parent-uuid", ListOptions{})
 		if err == nil {
 			t.Fatal("expected error for invalid JSON, got nil")
 		}
@@ -563,13 +543,32 @@ func TestListFolders(t *testing.T) {
 			t.Errorf("expected error to contain 'failed to decode', got %v", err)
 		}
 	})
+
+	t.Run("error - missing folders array", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"nextCursor":null}`))
+		}))
+		defer mockServer.Close()
+
+		cfg := newTestConfig(mockServer.URL)
+
+		_, _, err := ListFolders(context.Background(), cfg, "parent-uuid", ListOptions{})
+		if err == nil {
+			t.Fatal("expected error for missing folders array, got nil")
+		}
+	})
 }
 
 func TestListFiles(t *testing.T) {
 	t.Run("successful list with JSON numbers", func(t *testing.T) {
 		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/drive/folders/v2/content/parent-uuid/files" {
+				t.Errorf("unexpected path %s", r.URL.Path)
+			}
 			response := struct {
-				Files []File `json:"files"`
+				Files      []File  `json:"files"`
+				NextCursor *string `json:"nextCursor"`
 			}{
 				Files: []File{
 					{
@@ -588,7 +587,7 @@ func TestListFiles(t *testing.T) {
 
 		cfg := newTestConfig(mockServer.URL)
 
-		files, err := ListFiles(context.Background(), cfg, "parent-uuid", ListOptions{})
+		files, next, err := ListFiles(context.Background(), cfg, "parent-uuid", ListOptions{})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -598,6 +597,9 @@ func TestListFiles(t *testing.T) {
 		}
 		if files[0].UUID != "file-1" {
 			t.Errorf("expected UUID file-1, got %s", files[0].UUID)
+		}
+		if next != "" {
+			t.Errorf("expected empty next cursor, got %q", next)
 		}
 	})
 
@@ -610,7 +612,7 @@ func TestListFiles(t *testing.T) {
 
 		cfg := newTestConfig(mockServer.URL)
 
-		_, err := ListFiles(context.Background(), cfg, "non-existent-uuid", ListOptions{})
+		_, _, err := ListFiles(context.Background(), cfg, "non-existent-uuid", ListOptions{})
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -618,37 +620,36 @@ func TestListFiles(t *testing.T) {
 			t.Errorf("expected error to contain 404, got %v", err)
 		}
 	})
+
+	t.Run("error - missing files array", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"files":null,"nextCursor":null}`))
+		}))
+		defer mockServer.Close()
+
+		cfg := newTestConfig(mockServer.URL)
+
+		_, _, err := ListFiles(context.Background(), cfg, "parent-uuid", ListOptions{})
+		if err == nil {
+			t.Fatal("expected error for missing files array, got nil")
+		}
+	})
 }
 
 func TestListAllFiles(t *testing.T) {
-	t.Run("pagination loop - multiple pages", func(t *testing.T) {
-		callCount := 0
+	t.Run("follows the cursor across multiple pages", func(t *testing.T) {
+		all := make([]File, 2500)
+		for i := range all {
+			all[i] = File{UUID: "file-" + strconv.Itoa(i)}
+		}
+		var cursors []string
 		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			query := r.URL.Query()
-			offset := 0
-			if query.Get("offset") != "" {
-				// Parse offset from query
-				offset = callCount * 50
+			cursors = append(cursors, r.URL.Query().Get("cursor"))
+			if r.URL.Query().Get("limit") != "1000" {
+				t.Errorf("expected limit 1000, got %s", r.URL.Query().Get("limit"))
 			}
-
-			files := []File{}
-			// Return 50 files for first two calls, then 10 for the last
-			if callCount < 2 {
-				for i := range 50 {
-					files = append(files, File{UUID: "file-" + string(rune(offset+i))})
-				}
-			} else {
-				for i := range 10 {
-					files = append(files, File{UUID: "file-" + string(rune(offset+i))})
-				}
-			}
-
-			response := struct {
-				Files []File `json:"files"`
-			}{Files: files}
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(response)
-			callCount++
+			cursorPage(w, r, "files", all, 1000)
 		}))
 		defer mockServer.Close()
 
@@ -659,24 +660,23 @@ func TestListAllFiles(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		// Should have 50 + 50 + 10 = 110 files
-		if len(files) != 110 {
-			t.Errorf("expected 110 files, got %d", len(files))
+		if len(files) != len(all) {
+			t.Errorf("expected %d files, got %d", len(all), len(files))
+		}
+		if files[len(files)-1].UUID != "file-2499" {
+			t.Errorf("expected last file file-2499, got %s", files[len(files)-1].UUID)
+		}
+		if strings.Join(cursors, ",") != ",1000,2000" {
+			t.Errorf("expected cursors [\"\" 1000 2000], got %q", cursors)
 		}
 	})
 
-	t.Run("single page - less than 50 files", func(t *testing.T) {
+	t.Run("single page makes a single request", func(t *testing.T) {
+		calls := 0
 		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			response := struct {
-				Files []File `json:"files"`
-			}{
-				Files: []File{
-					{UUID: "file-1"},
-					{UUID: "file-2"},
-				},
-			}
+			calls++
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(response)
+			w.Write([]byte(`{"files":[{"uuid":"file-1"},{"uuid":"file-2"}],"nextCursor":null}`))
 		}))
 		defer mockServer.Close()
 
@@ -689,6 +689,29 @@ func TestListAllFiles(t *testing.T) {
 
 		if len(files) != 2 {
 			t.Errorf("expected 2 files, got %d", len(files))
+		}
+		if calls != 1 {
+			t.Errorf("expected 1 request, got %d", calls)
+		}
+	})
+
+	t.Run("repeated cursor stops with an error", func(t *testing.T) {
+		calls := 0
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"files":[{"uuid":"file-1"}],"nextCursor":"same"}`))
+		}))
+		defer mockServer.Close()
+
+		cfg := newTestConfig(mockServer.URL)
+
+		_, err := ListAllFiles(context.Background(), cfg, "parent-uuid")
+		if err == nil {
+			t.Fatal("expected error for repeated cursor, got nil")
+		}
+		if calls != 2 {
+			t.Errorf("expected 2 requests, got %d", calls)
 		}
 	})
 
@@ -712,27 +735,15 @@ func TestListAllFiles(t *testing.T) {
 }
 
 func TestListAllFolders(t *testing.T) {
-	t.Run("pagination loop - multiple pages", func(t *testing.T) {
-		callCount := 0
+	t.Run("follows the cursor across multiple pages", func(t *testing.T) {
+		all := make([]Folder, 1200)
+		for i := range all {
+			all[i] = Folder{UUID: "folder-" + strconv.Itoa(i)}
+		}
+		calls := 0
 		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			folders := []Folder{}
-			// Return 50 folders for first call, then 25 for the second
-			if callCount == 0 {
-				for i := range 50 {
-					folders = append(folders, Folder{UUID: "folder-" + string(rune(i))})
-				}
-			} else {
-				for i := range 25 {
-					folders = append(folders, Folder{UUID: "folder-" + string(rune(i+50))})
-				}
-			}
-
-			response := struct {
-				Folders []Folder `json:"folders"`
-			}{Folders: folders}
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(response)
-			callCount++
+			calls++
+			cursorPage(w, r, "folders", all, 1000)
 		}))
 		defer mockServer.Close()
 
@@ -743,9 +754,11 @@ func TestListAllFolders(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		// Should have 50 + 25 = 75 folders
-		if len(folders) != 75 {
-			t.Errorf("expected 75 folders, got %d", len(folders))
+		if len(folders) != len(all) {
+			t.Errorf("expected %d folders, got %d", len(all), len(folders))
+		}
+		if calls != 2 {
+			t.Errorf("expected 2 requests, got %d", calls)
 		}
 	})
 
@@ -766,4 +779,29 @@ func TestListAllFolders(t *testing.T) {
 			t.Errorf("expected error to contain 'failed to list all folders', got %v", err)
 		}
 	})
+}
+
+func TestListURLLimit(t *testing.T) {
+	cases := []struct {
+		limit int
+		want  string
+	}{
+		{-5, "1000"},
+		{0, "1000"},
+		{10, "50"},
+		{5000, "1000"},
+	}
+	for _, tc := range cases {
+		u, err := listURL("https://example.com/list", ListOptions{Limit: tc.limit})
+		if err != nil {
+			t.Fatalf("limit %d: unexpected error: %v", tc.limit, err)
+		}
+		parsed, err := url.Parse(u)
+		if err != nil {
+			t.Fatalf("limit %d: invalid URL %q: %v", tc.limit, u, err)
+		}
+		if got := parsed.Query().Get("limit"); got != tc.want {
+			t.Errorf("limit %d: expected %s, got %s", tc.limit, tc.want, got)
+		}
+	}
 }
