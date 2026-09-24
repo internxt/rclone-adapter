@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 )
 
 // GenerateAndPrepare generates a thumbnail and prepares it for upload.
@@ -57,7 +58,7 @@ func ProcessAsync(task *ThumbnailUploadTask, uploadFunc UploadFunc) {
 		bgCtx := context.Background()
 
 		if err := uploadFunc(bgCtx, task); err != nil {
-			fmt.Printf("[WARN] Thumbnail generation failed for %s: %v\n", task.FileUUID, err)
+			log.Printf("[WARN] Thumbnail generation failed for %s: %v\n", task.FileUUID, err)
 		}
 	}()
 }
