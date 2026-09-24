@@ -168,6 +168,47 @@ func MoveFolder(ctx context.Context, cfg *config.Config, folderUUID, destination
 	return nil
 }
 
+// CheckFoldersExistence returns the child folders of parentUUID whose
+// plainName exactly matches one of plainNames. Deleted and removed folders
+// are not returned. At most MaxExistenceNames names may be passed.
+func CheckFoldersExistence(ctx context.Context, cfg *config.Config, parentUUID string, plainNames []string) ([]Folder, error) {
+	if len(plainNames) > MaxExistenceNames {
+		return nil, fmt.Errorf("check folders existence: %d names given, at most %d allowed", len(plainNames), MaxExistenceNames)
+	}
+	if err := consistency.AwaitFolder(ctx, parentUUID); err != nil {
+		return nil, err
+	}
+
+	endpoint := cfg.Endpoints.Drive().Folders().CheckFoldersExistence(parentUUID)
+	body, err := json.Marshal(CheckFoldersExistenceRequest{PlainNames: plainNames})
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal check folders existence request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create check folders existence request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+cfg.Token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := cfg.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute check folders existence request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, errors.NewHTTPError(resp, "check folders existence")
+	}
+
+	var result CheckFoldersExistenceResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode check folders existence response: %w", err)
+	}
+	return result.Folders, nil
+}
+
 // ListFolders lists one page of child folders under the given parent UUID,
 // sorted by plainName. Only existing folders are returned.
 // It returns the folders and the cursor for the next page, which is empty
