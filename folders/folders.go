@@ -13,6 +13,7 @@ import (
 	"github.com/internxt/rclone-adapter/config"
 	"github.com/internxt/rclone-adapter/consistency"
 	"github.com/internxt/rclone-adapter/errors"
+	"github.com/internxt/rclone-adapter/internal/batch"
 )
 
 // CreateFolder calls the folder creation endpoint with authorization.
@@ -170,15 +171,32 @@ func MoveFolder(ctx context.Context, cfg *config.Config, folderUUID, destination
 
 // CheckFoldersExistence returns the child folders of parentUUID whose
 // plainName exactly matches one of plainNames. Deleted and removed folders
-// are not returned. At most MaxExistenceNames names may be passed.
+// are not returned. Any number of names may be passed: they are sent in as
+// many requests as the service's request limits need.
 func CheckFoldersExistence(ctx context.Context, cfg *config.Config, parentUUID string, plainNames []string) ([]Folder, error) {
-	if len(plainNames) > MaxExistenceNames {
-		return nil, fmt.Errorf("check folders existence: %d names given, at most %d allowed", len(plainNames), MaxExistenceNames)
+	batches, err := batch.Split(plainNames, maxExistenceNames, batch.MaxBodyBytes, func(names []string) any {
+		return CheckFoldersExistenceRequest{PlainNames: names}
+	})
+	if err != nil {
+		return nil, fmt.Errorf("check folders existence: %w", err)
 	}
 	if err := consistency.AwaitFolder(ctx, parentUUID); err != nil {
 		return nil, err
 	}
 
+	var found []Folder
+	for _, names := range batches {
+		folders, err := checkFoldersExistence(ctx, cfg, parentUUID, names)
+		if err != nil {
+			return nil, err
+		}
+		found = append(found, folders...)
+	}
+	return found, nil
+}
+
+// checkFoldersExistence makes one existence check request for plainNames.
+func checkFoldersExistence(ctx context.Context, cfg *config.Config, parentUUID string, plainNames []string) ([]Folder, error) {
 	endpoint := cfg.Endpoints.Drive().Folders().CheckFoldersExistence(parentUUID)
 	body, err := json.Marshal(CheckFoldersExistenceRequest{PlainNames: plainNames})
 	if err != nil {

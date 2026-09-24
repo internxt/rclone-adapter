@@ -132,8 +132,9 @@ const (
 	MaxPageSize = 1000
 )
 
-// MaxExistenceNames is the most names CheckFoldersExistence accepts in one call.
-const MaxExistenceNames = 200
+// maxExistenceNames is the most names CheckFoldersExistence sends in one
+// request.
+const maxExistenceNames = 200
 
 // CheckFoldersExistenceRequest is the request payload for CheckFoldersExistence.
 type CheckFoldersExistenceRequest struct {
