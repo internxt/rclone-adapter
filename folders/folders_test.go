@@ -805,3 +805,81 @@ func TestListURLLimit(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckFoldersExistence(t *testing.T) {
+	t.Run("returns matching folders", func(t *testing.T) {
+		var captured CheckFoldersExistenceRequest
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				t.Errorf("expected POST request, got %s", r.Method)
+			}
+			if r.URL.Path != "/drive/folders/content/parent-uuid/folders/existence" {
+				t.Errorf("unexpected path %s", r.URL.Path)
+			}
+			if r.Header.Get("Authorization") != "Bearer test-token" {
+				t.Errorf("unexpected Authorization header %q", r.Header.Get("Authorization"))
+			}
+			if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+				t.Errorf("failed to decode request body: %v", err)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			w.Write([]byte(`{"existentFolders":[{"uuid":"child-uuid","plainName":"docs","parentUuid":"parent-uuid","status":"EXISTS"}]}`))
+		}))
+		defer mockServer.Close()
+
+		got, err := CheckFoldersExistence(context.Background(), newTestConfig(mockServer.URL), "parent-uuid", []string{"docs", "missing"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(captured.PlainNames) != 2 || captured.PlainNames[0] != "docs" || captured.PlainNames[1] != "missing" {
+			t.Errorf("unexpected plainNames %v", captured.PlainNames)
+		}
+		if len(got) != 1 || got[0].UUID != "child-uuid" || got[0].PlainName != "docs" {
+			t.Errorf("unexpected result %+v", got)
+		}
+	})
+
+	t.Run("no matches", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"existentFolders":[]}`))
+		}))
+		defer mockServer.Close()
+
+		got, err := CheckFoldersExistence(context.Background(), newTestConfig(mockServer.URL), "parent-uuid", []string{"missing"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("expected no folders, got %+v", got)
+		}
+	})
+
+	t.Run("error - invalid parent", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"message":"Parent folder not valid","error":"Bad Request","statusCode":400}`))
+		}))
+		defer mockServer.Close()
+
+		_, err := CheckFoldersExistence(context.Background(), newTestConfig(mockServer.URL), "parent-uuid", []string{"docs"})
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "400") {
+			t.Errorf("expected error to contain 400, got %v", err)
+		}
+	})
+
+	t.Run("error - too many names", func(t *testing.T) {
+		names := make([]string, MaxExistenceNames+1)
+		for i := range names {
+			names[i] = strconv.Itoa(i)
+		}
+		_, err := CheckFoldersExistence(context.Background(), newTestConfig("http://127.0.0.1:0"), "parent-uuid", names)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+}

@@ -132,6 +132,19 @@ const (
 	MaxPageSize = 1000
 )
 
+// MaxExistenceNames is the most names CheckFoldersExistence accepts in one call.
+const MaxExistenceNames = 200
+
+// CheckFoldersExistenceRequest is the request payload for CheckFoldersExistence.
+type CheckFoldersExistenceRequest struct {
+	PlainNames []string `json:"plainNames"`
+}
+
+// CheckFoldersExistenceResponse is the response of CheckFoldersExistence.
+type CheckFoldersExistenceResponse struct {
+	Folders []Folder `json:"existentFolders"`
+}
+
 // ListOptions defines cursor pagination parameters for list endpoints.
 // Results are always sorted by plainName.
 type ListOptions struct {
