@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -162,7 +163,6 @@ func UploadFileStream(ctx context.Context, cfg *config.Config, targetFolderUUID,
 	// Handle unknown size by buffering entire stream
 	var preBuf []byte
 	if plainSize < 0 {
-		fmt.Printf("[DEBUG] UploadFileStream: Unknown size, buffering entire stream...\n")
 		preBuf, err = io.ReadAll(r)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read stream (unknown size): %w", err)
@@ -339,7 +339,7 @@ func uploadThumbnailAsync(ctx context.Context, cfg *config.Config, fileUUID, fil
 	bgCtx := context.Background()
 
 	if err := uploadThumbnailWithRetry(bgCtx, cfg, fileUUID, fileType, originalData); err != nil {
-		fmt.Printf("[WARN] Thumbnail upload failed for %s after retries: %v\n", fileUUID, err)
+		log.Printf("[WARN] Thumbnail upload failed for %s after retries: %v\n", fileUUID, err)
 	}
 }
 
@@ -387,8 +387,6 @@ func uploadThumbnail(ctx context.Context, cfg *config.Config, fileUUID, fileType
 	if err != nil {
 		return fmt.Errorf("failed to generate thumbnail: %w", err)
 	}
-
-	fmt.Printf("[DEBUG] Uploading thumbnail for file %s\n", fileUUID)
 
 	encryptedReader, sha256Hasher, encIndex, err := encryptionSetup(thumbReader, cfg)
 	if err != nil {
