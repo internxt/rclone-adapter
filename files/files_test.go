@@ -3,12 +3,15 @@ package files
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/internxt/rclone-adapter/buckets"
+	"github.com/internxt/rclone-adapter/internal/batch"
 )
 
 func TestDeleteFile(t *testing.T) {
@@ -347,6 +350,50 @@ func TestMoveFile(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCheckFilesExistenceBatches(t *testing.T) {
+	var batchSizes []int
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if len(body) > batch.MaxBodyBytes {
+			t.Errorf("request body is %d bytes", len(body))
+		}
+		var req CheckFilesExistenceRequest
+		if err := json.Unmarshal(body, &req); err != nil {
+			t.Errorf("failed to decode request body: %v", err)
+		}
+		if len(req.Files) > maxExistenceChecks {
+			t.Errorf("request has %d files", len(req.Files))
+		}
+		batchSizes = append(batchSizes, len(req.Files))
+		resp := CheckFilesExistenceResponse{Files: []FileExistenceResult{}}
+		for _, f := range req.Files {
+			resp.Files = append(resp.Files, FileExistenceResult{Exists: true, PlainName: f.PlainName, Type: f.Type})
+		}
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+
+	files := make([]FileExistenceCheck, 450)
+	for i := range files {
+		files[i] = FileExistenceCheck{PlainName: fmt.Sprintf("%04d", i) + strings.Repeat("文", 250), Type: "txt"}
+	}
+	result, err := CheckFilesExistence(context.Background(), newTestConfig(mockServer.URL), "folder-uuid", files)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(batchSizes) < 4 {
+		t.Errorf("expected at least 4 requests, got batches %v", batchSizes)
+	}
+	if len(result.Files) != len(files) {
+		t.Fatalf("expected %d results, got %d", len(files), len(result.Files))
+	}
+	for i, f := range result.Files {
+		if f.PlainName != files[i].PlainName {
+			t.Fatalf("result %d is %q, want %q", i, f.PlainName[:4], files[i].PlainName[:4])
+		}
 	}
 }
 

@@ -3,6 +3,8 @@ package folders
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,6 +14,7 @@ import (
 	"time"
 
 	"github.com/internxt/rclone-adapter/consistency"
+	"github.com/internxt/rclone-adapter/internal/batch"
 )
 
 func TestCreateFolder(t *testing.T) {
@@ -872,14 +875,70 @@ func TestCheckFoldersExistence(t *testing.T) {
 		}
 	})
 
-	t.Run("error - too many names", func(t *testing.T) {
-		names := make([]string, MaxExistenceNames+1)
+	t.Run("splits names into batches the service accepts", func(t *testing.T) {
+		var batchSizes []int
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, _ := io.ReadAll(r.Body)
+			if len(body) > batch.MaxBodyBytes {
+				t.Errorf("request body is %d bytes", len(body))
+			}
+			var req CheckFoldersExistenceRequest
+			if err := json.Unmarshal(body, &req); err != nil {
+				t.Errorf("failed to decode request body: %v", err)
+			}
+			if len(req.PlainNames) > maxExistenceNames {
+				t.Errorf("request has %d names", len(req.PlainNames))
+			}
+			batchSizes = append(batchSizes, len(req.PlainNames))
+			resp := CheckFoldersExistenceResponse{Folders: []Folder{}}
+			for _, name := range req.PlainNames {
+				resp.Folders = append(resp.Folders, Folder{UUID: "uuid-" + name[:4], PlainName: name})
+			}
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(resp)
+		}))
+		defer mockServer.Close()
+
+		// long non-ASCII names hit the body size limit before the name limit
+		names := make([]string, 450)
+		for i := range names {
+			names[i] = fmt.Sprintf("%04d", i) + strings.Repeat("文", 250)
+		}
+		got, err := CheckFoldersExistence(context.Background(), newTestConfig(mockServer.URL), "parent-uuid", names)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(batchSizes) < 4 {
+			t.Errorf("expected at least 4 requests, got batches %v", batchSizes)
+		}
+		if len(got) != len(names) {
+			t.Fatalf("expected %d folders, got %d", len(names), len(got))
+		}
+		for i, folder := range got {
+			if folder.PlainName != names[i] {
+				t.Fatalf("folder %d is %q, want %q", i, folder.PlainName[:4], names[i][:4])
+			}
+		}
+	})
+
+	t.Run("stops at the first failed batch", func(t *testing.T) {
+		requests := 0
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requests++
+			w.WriteHeader(http.StatusBadRequest)
+		}))
+		defer mockServer.Close()
+
+		names := make([]string, 450)
 		for i := range names {
 			names[i] = strconv.Itoa(i)
 		}
-		_, err := CheckFoldersExistence(context.Background(), newTestConfig("http://127.0.0.1:0"), "parent-uuid", names)
-		if err == nil {
-			t.Fatal("expected error, got nil")
+		_, err := CheckFoldersExistence(context.Background(), newTestConfig(mockServer.URL), "parent-uuid", names)
+		if err == nil || !strings.Contains(err.Error(), "400") {
+			t.Errorf("expected 400 error, got %v", err)
+		}
+		if requests != 1 {
+			t.Errorf("expected 1 request, got %d", requests)
 		}
 	})
 }
