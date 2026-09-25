@@ -10,7 +10,7 @@ import (
 	"io"
 	"math/big"
 
-	"github.com/tyler-smith/go-bip39"
+	"github.com/internxt/rclone-adapter/internal/bip39"
 	"golang.org/x/crypto/ripemd160"
 )
 
@@ -73,7 +73,10 @@ func GenerateFileBucketKey(mnemonic, bucketID string) ([]byte, error) {
 	if !bip39.IsMnemonicValid(mnemonic) {
 		return nil, fmt.Errorf("invalid mnemonic")
 	}
-	seed := bip39.NewSeed(mnemonic, "")
+	seed, err := bip39.NewSeed(mnemonic, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to derive seed: %w", err)
+	}
 	bucketBytes, err := hex.DecodeString(bucketID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode bucket ID: %w", err)
@@ -86,7 +89,10 @@ func GenerateBucketKey(mnem string, bucketID []byte) (string, error) {
 	if !bip39.IsMnemonicValid(mnem) {
 		return "", fmt.Errorf("invalid mnemonic")
 	}
-	seed := bip39.NewSeed(mnem, "")
+	seed, err := bip39.NewSeed(mnem, "")
+	if err != nil {
+		return "", fmt.Errorf("failed to derive seed: %w", err)
+	}
 	deterministicKey, err := GetDeterministicKey(seed, bucketID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get deterministic key: %w", err)
