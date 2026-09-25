@@ -31,7 +31,7 @@ const (
 	TestFileID2       = "file-id"
 	TestFileUUID      = "file-uuid-456"
 	TestFileUUID2     = "new-file-uuid"
-	TestIndex         = "0123456789abcdef00000123456789abcdef00000000123456789abcdef00000000"
+	TestIndex         = "0123456789abcdef00000123456789abcdef00000123456789abcdef00000000"
 
 	// Thumbnail test constants
 	TestThumbFileUUID = "test-file-uuid"
