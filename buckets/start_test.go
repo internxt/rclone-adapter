@@ -291,7 +291,7 @@ func TestStartUpload(t *testing.T) {
 			},
 			mockStatusCode: http.StatusInternalServerError,
 			expectError:    true,
-			errorContains:  "failed",
+			errorContains:  "start upload: error message (status 500)",
 		},
 		{
 			name: "unauthorized - 401",

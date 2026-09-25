@@ -69,7 +69,7 @@ func TestFinishUpload(t *testing.T) {
 			mockStatusCode: http.StatusInternalServerError,
 			mockBody:       `{"error": "duplicate key error collection: buckets"}`,
 			expectError:    true,
-			errorContains:  "finish upload failed",
+			errorContains:  "finish upload: duplicate key error collection: buckets (status 500)",
 		},
 		{
 			name:           "error - server 500",
@@ -79,7 +79,7 @@ func TestFinishUpload(t *testing.T) {
 			mockStatusCode: http.StatusInternalServerError,
 			mockBody:       "internal server error",
 			expectError:    true,
-			errorContains:  "finish upload failed",
+			errorContains:  "finish upload: internal server error (status 500)",
 		},
 		{
 			name:           "error - unauthorized 401",
@@ -323,7 +323,7 @@ func TestFinishMultipartUpload(t *testing.T) {
 			},
 			mockStatusCode: http.StatusInternalServerError,
 			expectError:    true,
-			errorContains:  "failed",
+			errorContains:  "finish multipart upload: error message (status 500)",
 		},
 		{
 			name: "server error - 500",
@@ -335,7 +335,7 @@ func TestFinishMultipartUpload(t *testing.T) {
 			},
 			mockStatusCode: http.StatusInternalServerError,
 			expectError:    true,
-			errorContains:  "failed",
+			errorContains:  "finish multipart upload: error message (status 500)",
 		},
 		{
 			name: "unauthorized - 401",

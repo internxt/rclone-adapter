@@ -785,8 +785,8 @@ func TestDownloadFile(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for non-2xx status, got nil")
 		}
-		if !strings.Contains(err.Error(), "shard download failed") {
-			t.Errorf("expected error to contain 'shard download failed', got %v", err)
+		if !strings.Contains(err.Error(), "shard download: shard not found (status 404)") {
+			t.Errorf("expected error to contain 'shard download: shard not found (status 404)', got %v", err)
 		}
 		if !strings.Contains(err.Error(), "404") {
 			t.Errorf("expected error to contain '404', got %v", err)
@@ -1354,8 +1354,8 @@ func TestDownloadFileStream(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error when shard download returns 404, got nil")
 		}
-		if !strings.Contains(err.Error(), "shard download failed") {
-			t.Errorf("expected error to contain 'shard download failed', got %v", err)
+		if !strings.Contains(err.Error(), "shard download stream: shard not found (status 404)") {
+			t.Errorf("expected error to contain 'shard download stream: shard not found (status 404)', got %v", err)
 		}
 		if !strings.Contains(err.Error(), "404") {
 			t.Errorf("expected error to contain '404', got %v", err)
