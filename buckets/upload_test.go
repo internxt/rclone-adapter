@@ -1136,6 +1136,42 @@ func TestUploadThumbnailWithRetry(t *testing.T) {
 			t.Errorf("expected 3 thumbnail API attempts, got %d", thumbnailAttemptCount)
 		}
 	})
+
+	t.Run("file not found yet retries registration only", func(t *testing.T) {
+		mockServer := newMockMultiEndpointServer()
+		defer mockServer.Close()
+		mockServer.SetupSuccessfulUploadMock()
+
+		var startCount, thumbnailAttemptCount int
+		startHandler := mockServer.startHandler
+		mockServer.startHandler = func(w http.ResponseWriter, r *http.Request) {
+			startCount++
+			startHandler(w, r)
+		}
+		mockServer.thumbnailHandler = func(w http.ResponseWriter, r *http.Request) {
+			thumbnailAttemptCount++
+			if thumbnailAttemptCount < 2 {
+				w.WriteHeader(http.StatusNotFound)
+				w.Write([]byte(`{"message":"File not found"}`))
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+		}
+
+		cfg := newTestConfigWithSetup(mockServer.URL(), nil)
+
+		err := uploadThumbnailWithRetry(context.Background(), cfg, TestThumbFileUUID, TestValidPNG)
+		if err != nil {
+			t.Fatalf("expected success after retry, got error: %v", err)
+		}
+
+		if thumbnailAttemptCount != 2 {
+			t.Errorf("expected 2 thumbnail API attempts, got %d", thumbnailAttemptCount)
+		}
+		if startCount != 1 {
+			t.Errorf("expected the thumbnail to be uploaded once, got %d uploads", startCount)
+		}
+	})
 }
 
 // TestUploadThumbnailAsync tests the async thumbnail upload wrapper

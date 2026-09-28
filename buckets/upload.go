@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"hash"
 	"io"
@@ -355,9 +356,50 @@ func uploadThumbnailAsync(cfg *config.Config, fileUUID string, thumb []byte) {
 }
 
 // uploadThumbnailWithRetry uploads thumb, a PNG thumbnail made with the
-// default config, and registers it for the given file, backing off
-// exponentially between tries. Each try holds a slot of thumbnailSem.
+// default config, and registers it for the given file, retrying each step
 func uploadThumbnailWithRetry(ctx context.Context, cfg *config.Config, fileUUID string, thumb []byte) error {
+	var fileID string
+	err := retryThumbnail(ctx, isRetryableError, func() error {
+		var err error
+		fileID, err = uploadThumbnail(ctx, cfg, thumb)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+
+	req := thumbnails.CreateThumbnailMetadata(
+		fileUUID,
+		cfg.Bucket,
+		fileID,
+		"03-aes",
+		int64(len(thumb)),
+		thumbnails.DefaultConfig(),
+	)
+	return retryThumbnail(ctx, isRegisterThumbnailRetryable, func() error {
+		if err := createThumbnailAPI(ctx, cfg, req); err != nil {
+			return fmt.Errorf("failed to register thumbnail: %w", err)
+		}
+		return nil
+	})
+}
+
+// isRegisterThumbnailRetryable reports whether registering a thumbnail
+// should be retried after err. The API doesn't find the file for a short while
+// after it is created as lookups are served by read replicas which lag behind,
+// so not found is retried too.
+func isRegisterThumbnailRetryable(err error) bool {
+	var httpErr *errors.HTTPError
+	if stderrors.As(err, &httpErr) && httpErr.StatusCode() == http.StatusNotFound {
+		return true
+	}
+	return isRetryableError(err)
+}
+
+// retryThumbnail calls fn until it succeeds, it returns an error retryable
+// rejects or it has been tried 5 times, backing off exponentially between
+// tries. Each call holds a slot of thumbnailSem.
+func retryThumbnail(ctx context.Context, retryable func(error) bool, fn func() error) error {
 	const maxRetries = 5
 	const baseDelay = 2 * time.Second
 
@@ -381,14 +423,14 @@ func uploadThumbnailWithRetry(ctx context.Context, cfg *config.Config, fileUUID 
 		}
 
 		thumbnailSem <- struct{}{}
-		err := uploadThumbnail(ctx, cfg, fileUUID, thumb)
+		err := fn()
 		<-thumbnailSem
 		if err == nil {
 			return nil
 		}
 
 		lastErr = err
-		if !isRetryableError(err) {
+		if !retryable(err) {
 			return fmt.Errorf("non-retryable error: %w", err)
 		}
 	}
@@ -396,34 +438,14 @@ func uploadThumbnailWithRetry(ctx context.Context, cfg *config.Config, fileUUID 
 	return fmt.Errorf("thumbnail upload failed after %d retries: %w", maxRetries, lastErr)
 }
 
-// uploadThumbnail uploads thumb, a PNG thumbnail made with the default
-// config, and registers it for the given file
-func uploadThumbnail(ctx context.Context, cfg *config.Config, fileUUID string, thumb []byte) error {
-	thumbSize := int64(len(thumb))
+// uploadThumbnail encrypts and uploads the thumbnail data thumb, returning
+// its network file ID
+func uploadThumbnail(ctx context.Context, cfg *config.Config, thumb []byte) (string, error) {
 	encryptedReader, sha256Hasher, encIndex, err := encryptionSetup(bytes.NewReader(thumb), cfg)
 	if err != nil {
-		return err
+		return "", err
 	}
-
-	fileID, err := uploadEncryptedData(ctx, cfg, encryptedReader, sha256Hasher, encIndex, thumbSize)
-	if err != nil {
-		return err
-	}
-
-	req := thumbnails.CreateThumbnailMetadata(
-		fileUUID,
-		cfg.Bucket,
-		fileID,
-		"03-aes",
-		thumbSize,
-		thumbnails.DefaultConfig(),
-	)
-
-	if err := createThumbnailAPI(ctx, cfg, req); err != nil {
-		return fmt.Errorf("failed to register thumbnail: %w", err)
-	}
-
-	return nil
+	return uploadEncryptedData(ctx, cfg, encryptedReader, sha256Hasher, encIndex, int64(len(thumb)))
 }
 
 // createThumbnailAPI registers a thumbnail via POST /drive/files/thumbnail
