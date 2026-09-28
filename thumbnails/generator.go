@@ -20,6 +20,10 @@ import (
 // maxSourcePixels is the largest image, in pixels, a thumbnail is made from.
 const maxSourcePixels = 128 << 20
 
+// maxProgressivePixels is the largest progressive JPEG, in pixels, a
+// thumbnail is made from
+const maxProgressivePixels = 8 << 20
+
 // shrinkFactor is how many times the thumbnail size fit shrinks an image to
 // by averaging before interpolating it down to the thumbnail size.
 const shrinkFactor = 3
@@ -48,11 +52,11 @@ func Generate(imageData []byte, cfg *Config) ([]byte, int64, error) {
 	if cfg == nil {
 		cfg = DefaultConfig()
 	}
-	img, err := decode(bytes.NewReader(imageData))
+	img, orientation, err := decode(bytes.NewReader(imageData))
 	if err != nil {
 		return nil, 0, err
 	}
-	thumbnailBytes, err := encodeThumbnail(img, cfg)
+	thumbnailBytes, err := encodeThumbnail(img, orientation, cfg)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -78,13 +82,13 @@ func NewGenerator(cfg *Config) *Generator {
 	g := &Generator{pw: pw, done: make(chan struct{})}
 	go func() {
 		defer close(g.done)
-		img, err := decode(pr)
+		img, orientation, err := decode(pr)
 		_ = pr.Close()
 		if err != nil {
 			g.err = err
 			return
 		}
-		g.thumb, g.err = encodeThumbnail(img, cfg)
+		g.thumb, g.err = encodeThumbnail(img, orientation, cfg)
 	}()
 	return g
 }
@@ -110,27 +114,44 @@ func (g *Generator) Finish(err error) ([]byte, error) {
 	return g.thumb, g.err
 }
 
-// decode decodes the image read from r.
-func decode(r io.Reader) (image.Image, error) {
+// decode decodes the image read from r and returns it with its EXIF
+// orientation.
+func decode(r io.Reader) (image.Image, int, error) {
 	var header bytes.Buffer
-	imgCfg, _, err := image.DecodeConfig(io.TeeReader(r, &header))
+	imgCfg, format, err := image.DecodeConfig(io.TeeReader(r, &header))
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode image: %w", err)
+		return nil, 0, fmt.Errorf("failed to decode image: %w", err)
 	}
-	if int64(imgCfg.Width)*int64(imgCfg.Height) > maxSourcePixels {
-		return nil, fmt.Errorf("image too large for thumbnail: %dx%d", imgCfg.Width, imgCfg.Height)
+	pixels := int64(imgCfg.Width) * int64(imgCfg.Height)
+	if pixels > maxSourcePixels {
+		return nil, 0, fmt.Errorf("image too large for thumbnail: %dx%d", imgCfg.Width, imgCfg.Height)
+	}
+	orientation := 1
+	if format == "jpeg" {
+		var progressive bool
+		orientation, progressive = jpegHeader(header.Bytes())
+		if progressive && pixels > maxProgressivePixels {
+			return nil, 0, fmt.Errorf("progressive JPEG too large for thumbnail: %dx%d", imgCfg.Width, imgCfg.Height)
+		}
 	}
 
 	img, _, err := image.Decode(io.MultiReader(&header, r))
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode image: %w", err)
+		return nil, 0, fmt.Errorf("failed to decode image: %w", err)
 	}
-	return img, nil
+	return img, orientation, nil
 }
 
-// encodeThumbnail returns a thumbnail of img as PNG bytes.
-func encodeThumbnail(img image.Image, cfg *Config) ([]byte, error) {
-	thumb := fit(img, cfg.MaxWidth, cfg.MaxHeight)
+// encodeThumbnail returns an upright thumbnail of img, which has the given
+// EXIF orientation, as PNG bytes.
+func encodeThumbnail(img image.Image, orientation int, cfg *Config) ([]byte, error) {
+	// The image is resized as stored and then turned upright, so the
+	// bounds are swapped for orientations which turn it on its side.
+	maxWidth, maxHeight := cfg.MaxWidth, cfg.MaxHeight
+	if orientation >= 5 {
+		maxWidth, maxHeight = maxHeight, maxWidth
+	}
+	thumb := orient(fit(img, maxWidth, maxHeight), orientation)
 
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, thumb); err != nil {
