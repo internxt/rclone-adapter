@@ -39,7 +39,6 @@ const (
 	TestThumbETag     = "\"thumb-etag\""
 	TestThumbFileID   = "thumb-file-id"
 	TestThumbPath     = "/upload/thumb"
-	TestThumbType     = "png"
 )
 
 const TestIVOffset = byte(100)

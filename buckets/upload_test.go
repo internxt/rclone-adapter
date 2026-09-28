@@ -965,7 +965,7 @@ func TestUploadThumbnailWithRetry(t *testing.T) {
 
 		cfg := newTestConfigWithSetup(mockServer.URL(), nil)
 
-		err := uploadThumbnailWithRetry(context.Background(), cfg, TestThumbFileUUID, TestThumbType, TestValidPNG)
+		err := uploadThumbnailWithRetry(context.Background(), cfg, TestThumbFileUUID, TestValidPNG)
 		if err != nil {
 			t.Fatalf("expected success, got error: %v", err)
 		}
@@ -1007,7 +1007,7 @@ func TestUploadThumbnailWithRetry(t *testing.T) {
 
 		cfg := newTestConfigWithSetup(mockServer.URL(), nil)
 
-		err := uploadThumbnailWithRetry(context.Background(), cfg, TestThumbFileUUID, TestThumbType, TestValidPNG)
+		err := uploadThumbnailWithRetry(context.Background(), cfg, TestThumbFileUUID, TestValidPNG)
 		if err != nil {
 			t.Fatalf("expected success after retries, got error: %v", err)
 		}
@@ -1030,7 +1030,7 @@ func TestUploadThumbnailWithRetry(t *testing.T) {
 
 		cfg := newTestConfigWithSetup(mockServer.URL(), nil)
 
-		err := uploadThumbnailWithRetry(context.Background(), cfg, TestThumbFileUUID, TestThumbType, TestValidPNG)
+		err := uploadThumbnailWithRetry(context.Background(), cfg, TestThumbFileUUID, TestValidPNG)
 		if err == nil {
 			t.Fatal("expected error after retries exhausted, got nil")
 		}
@@ -1058,7 +1058,7 @@ func TestUploadThumbnailWithRetry(t *testing.T) {
 
 		cfg := newTestConfigWithSetup(mockServer.URL(), nil)
 
-		err := uploadThumbnailWithRetry(context.Background(), cfg, TestThumbFileUUID, TestThumbType, TestValidPNG)
+		err := uploadThumbnailWithRetry(context.Background(), cfg, TestThumbFileUUID, TestValidPNG)
 		if err == nil {
 			t.Fatal("expected error for 404, got nil")
 		}
@@ -1081,7 +1081,7 @@ func TestUploadThumbnailWithRetry(t *testing.T) {
 
 		cfg := newTestConfigWithSetup(mockServer.URL(), nil)
 
-		err := uploadThumbnailWithRetry(ctx, cfg, TestThumbFileUUID, TestThumbType, TestValidPNG)
+		err := uploadThumbnailWithRetry(ctx, cfg, TestThumbFileUUID, TestValidPNG)
 		if err == nil {
 			t.Fatal("expected error for cancelled context, got nil")
 		}
@@ -1127,7 +1127,7 @@ func TestUploadThumbnailWithRetry(t *testing.T) {
 
 		cfg := newTestConfigWithSetup(mockServer.URL(), nil)
 
-		err := uploadThumbnailWithRetry(context.Background(), cfg, TestThumbFileUUID, TestThumbType, TestValidPNG)
+		err := uploadThumbnailWithRetry(context.Background(), cfg, TestThumbFileUUID, TestValidPNG)
 		if err != nil {
 			t.Fatalf("expected success after retries, got error: %v", err)
 		}
@@ -1173,7 +1173,7 @@ func TestUploadThumbnailAsync(t *testing.T) {
 		cfg := newTestConfigWithSetup(mockServer.URL(), nil)
 
 		thumbnailWG.Add(1)
-		go uploadThumbnailAsync(context.Background(), cfg, TestThumbFileUUID, TestThumbType, TestValidPNG)
+		go uploadThumbnailAsync(cfg, TestThumbFileUUID, TestValidPNG)
 
 		select {
 		case <-done:
@@ -1221,7 +1221,7 @@ func TestWaitForPendingThumbnails(t *testing.T) {
 		cfg := newTestConfigWithSetup(mockServer.URL(), nil)
 
 		thumbnailWG.Add(1)
-		go uploadThumbnailAsync(context.Background(), cfg, TestThumbFileUUID, TestThumbType, TestValidPNG)
+		go uploadThumbnailAsync(cfg, TestThumbFileUUID, TestValidPNG)
 
 		<-uploadStarted
 
