@@ -1,0 +1,21 @@
+version: "2"
+
+linters:
+  exclusions:
+    presets:
+      - std-error-handling
+    paths:
+      # Unmodified vendored copy of tyler-smith/go-bip39.
+      - internal/bip39
+    rules:
+      # Mock HTTP handlers in tests routinely ignore write/encode errors.
+      - path: _test\.go
+        linters:
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    paths:
+      - internal/bip39
