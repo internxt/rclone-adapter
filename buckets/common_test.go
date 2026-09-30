@@ -55,13 +55,13 @@ var TestValidPNG = []byte{
 
 // MockMultiEndpointServer manages multiple HTTP endpoints for integration testing.
 type MockMultiEndpointServer struct {
-	startHandler           http.HandlerFunc
-	transferHandler        http.HandlerFunc
-	finishHandler          http.HandlerFunc
-	createMetaHandler      http.HandlerFunc
-	multipartStartHandler  http.HandlerFunc
-	thumbnailHandler       http.HandlerFunc
-	server                 *httptest.Server
+	startHandler          http.HandlerFunc
+	transferHandler       http.HandlerFunc
+	finishHandler         http.HandlerFunc
+	createMetaHandler     http.HandlerFunc
+	multipartStartHandler http.HandlerFunc
+	thumbnailHandler      http.HandlerFunc
+	server                *httptest.Server
 }
 
 // NewMockMultiEndpointServer creates a new multi-endpoint mock server for testing
