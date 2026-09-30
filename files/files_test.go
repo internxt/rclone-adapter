@@ -10,9 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/internxt/rclone-adapter/buckets"
 	"github.com/internxt/rclone-adapter/internal/batch"
 )
+
+const testFileUUID = "file-uuid-456"
 
 func TestDeleteFile(t *testing.T) {
 	testCases := []struct {
@@ -24,13 +25,13 @@ func TestDeleteFile(t *testing.T) {
 	}{
 		{
 			name:           "successful deletion",
-			uuid:           buckets.TestFileUUID,
+			uuid:           testFileUUID,
 			mockStatusCode: http.StatusOK,
 			expectError:    false,
 		},
 		{
 			name:           "unauthorized - 401",
-			uuid:           buckets.TestFileUUID,
+			uuid:           testFileUUID,
 			mockStatusCode: http.StatusUnauthorized,
 			expectError:    true,
 			errorContains:  "401",
@@ -44,7 +45,7 @@ func TestDeleteFile(t *testing.T) {
 		},
 		{
 			name:           "server error - 500",
-			uuid:           buckets.TestFileUUID,
+			uuid:           testFileUUID,
 			mockStatusCode: http.StatusInternalServerError,
 			expectError:    true,
 			errorContains:  "500",
@@ -106,7 +107,7 @@ func TestRenameFile(t *testing.T) {
 	}{
 		{
 			name:           "successful rename with type",
-			fileUUID:       buckets.TestFileUUID,
+			fileUUID:       testFileUUID,
 			newPlainName:   "new-name",
 			newType:        "text/plain",
 			mockStatusCode: http.StatusOK,
@@ -114,7 +115,7 @@ func TestRenameFile(t *testing.T) {
 		},
 		{
 			name:           "successful rename without type",
-			fileUUID:       buckets.TestFileUUID,
+			fileUUID:       testFileUUID,
 			newPlainName:   "new-name",
 			newType:        "",
 			mockStatusCode: http.StatusOK,
@@ -122,7 +123,7 @@ func TestRenameFile(t *testing.T) {
 		},
 		{
 			name:           "unauthorized - 401",
-			fileUUID:       buckets.TestFileUUID,
+			fileUUID:       testFileUUID,
 			newPlainName:   "new-name",
 			newType:        "",
 			mockStatusCode: http.StatusUnauthorized,
@@ -140,7 +141,7 @@ func TestRenameFile(t *testing.T) {
 		},
 		{
 			name:           "server error - 500",
-			fileUUID:       buckets.TestFileUUID,
+			fileUUID:       testFileUUID,
 			newPlainName:   "new-name",
 			newType:        "",
 			mockStatusCode: http.StatusInternalServerError,
@@ -227,7 +228,7 @@ func TestMoveFile(t *testing.T) {
 	}{
 		{
 			name:                  "successful move with rename",
-			fileUUID:              buckets.TestFileUUID,
+			fileUUID:              testFileUUID,
 			destinationFolderUUID: "dest-folder-uuid",
 			newName:               "new-name",
 			newType:               "pdf",
@@ -236,7 +237,7 @@ func TestMoveFile(t *testing.T) {
 		},
 		{
 			name:                  "successful move without rename",
-			fileUUID:              buckets.TestFileUUID,
+			fileUUID:              testFileUUID,
 			destinationFolderUUID: "dest-folder-uuid",
 			newName:               "",
 			newType:               "",
@@ -245,7 +246,7 @@ func TestMoveFile(t *testing.T) {
 		},
 		{
 			name:                  "successful rename clearing extension",
-			fileUUID:              buckets.TestFileUUID,
+			fileUUID:              testFileUUID,
 			destinationFolderUUID: "dest-folder-uuid",
 			newName:               "new-name",
 			newType:               "",
@@ -254,7 +255,7 @@ func TestMoveFile(t *testing.T) {
 		},
 		{
 			name:                  "unauthorized - 401",
-			fileUUID:              buckets.TestFileUUID,
+			fileUUID:              testFileUUID,
 			destinationFolderUUID: "dest-folder-uuid",
 			newName:               "",
 			newType:               "",
@@ -424,9 +425,9 @@ func TestCheckFilesExistence(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:       "successful check with no files",
-			folderUUID: "test-folder-uuid",
-			files:      []FileExistenceCheck{},
+			name:           "successful check with no files",
+			folderUUID:     "test-folder-uuid",
+			files:          []FileExistenceCheck{},
 			mockStatusCode: http.StatusOK,
 			mockResponse: &CheckFilesExistenceResponse{
 				Files: []FileExistenceResult{},

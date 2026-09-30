@@ -11,7 +11,7 @@ import (
 	"math/big"
 
 	"github.com/internxt/rclone-adapter/internal/bip39"
-	"golang.org/x/crypto/ripemd160"
+	"golang.org/x/crypto/ripemd160" //nolint:staticcheck // RIPEMD-160 is required
 )
 
 // AddToIV adds n to iv as a big-endian 128-bit integer, returning a new slice.
