@@ -101,6 +101,9 @@ type clientHeaderTransport struct {
 
 func (t *clientHeaderTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err := t.validateSecurity(req); err != nil {
+		if req.Body != nil {
+			req.Body.Close()
+		}
 		return nil, err
 	}
 
