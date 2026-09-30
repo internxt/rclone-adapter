@@ -200,4 +200,3 @@ func TestCreateMetaFileInvalidJSON(t *testing.T) {
 		t.Errorf("expected error to contain 'failed to unmarshal', got %q", err.Error())
 	}
 }
-

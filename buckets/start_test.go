@@ -333,11 +333,6 @@ func TestStartUpload(t *testing.T) {
 					t.Errorf("expected Content-Type application/json; charset=utf-8, got %s", r.Header.Get("Content-Type"))
 				}
 
-				multiparts := r.URL.Query().Get("multiparts")
-				if !tc.expectError && multiparts != "" {
-					// multiparts should be set, the exact value depends on implementation
-				}
-
 				var reqBody startUploadReq
 				if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil && !tc.expectError {
 					t.Errorf("failed to decode request body: %v", err)
@@ -432,9 +427,8 @@ func TestStartUploadRequestFormat(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// multiparts should be set to the number of parts
-	if capturedMultiparts != "" {
-		// Verify it's set (exact value depends on implementation)
+	if capturedMultiparts != "1" {
+		t.Errorf("expected multiparts=1, got multiparts=%s", capturedMultiparts)
 	}
 
 	if len(capturedBody.Uploads) != 1 {

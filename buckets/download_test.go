@@ -685,7 +685,7 @@ func TestDownloadFile(t *testing.T) {
 		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
 				Index:  TestIndex,
-				Size:  100,
+				Size:   100,
 				Shards: []ShardInfo{},
 			}
 			w.WriteHeader(http.StatusOK)
@@ -1211,7 +1211,7 @@ func TestDownloadFileStream(t *testing.T) {
 		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
 				Index:  TestIndex,
-				Size:  100,
+				Size:   100,
 				Shards: []ShardInfo{},
 			}
 			w.WriteHeader(http.StatusOK)

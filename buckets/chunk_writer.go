@@ -27,8 +27,8 @@ type ChunkUploadSession struct {
 	totalSize  int64
 	chunkSize  int64
 	numParts   int64
-	fileKey []byte
-	iv      []byte
+	fileKey    []byte
+	iv         []byte
 }
 
 // NewChunkUploadSession initializes encryption and starts the multipart
@@ -62,8 +62,8 @@ func NewChunkUploadSession(ctx context.Context, cfg *config.Config, totalSize, c
 		totalSize:  totalSize,
 		chunkSize:  chunkSize,
 		numParts:   numParts,
-		fileKey: fileKey,
-		iv:      iv,
+		fileKey:    fileKey,
+		iv:         iv,
 	}
 
 	specs := []UploadPartSpec{{Index: 0, Size: totalSize}}

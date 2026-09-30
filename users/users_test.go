@@ -166,7 +166,7 @@ func TestGetLimit(t *testing.T) {
 			name:           "not found - 404",
 			mockStatusCode: http.StatusNotFound,
 			expectError:    true,
-			errorContains:  "404",	
+			errorContains:  "404",
 		},
 	}
 

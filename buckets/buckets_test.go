@@ -104,10 +104,7 @@ func TestNewAES256CTRCipher(t *testing.T) {
 			}
 		}()
 
-		_, err := NewAES256CTRCipher(key, iv)
-		if err == nil {
-			// If no error, the panic should have occurred
-		}
+		_, _ = NewAES256CTRCipher(key, iv)
 	})
 }
 
@@ -300,8 +297,8 @@ func TestNewCipherAtOffset(t *testing.T) {
 		chunkSize := int64(aes.BlockSize) // 16 bytes per chunk
 		seqStream, _ := NewAES256CTRCipher(session.fileKey, session.iv)
 		block0 := make([]byte, chunkSize)
-		seqStream.XORKeyStream(block0, block0) // skip block 0
-		plaintext := []byte("second block!!!!")  // 16 bytes
+		seqStream.XORKeyStream(block0, block0)  // skip block 0
+		plaintext := []byte("second block!!!!") // 16 bytes
 		seqCt := make([]byte, len(plaintext))
 		seqStream.XORKeyStream(seqCt, plaintext)
 

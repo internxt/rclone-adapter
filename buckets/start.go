@@ -52,9 +52,6 @@ func StartUpload(ctx context.Context, cfg *config.Config, bucketID string, parts
 	req.Header.Set("internxt-version", "1.0")
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 
-	if cfg.BasicAuthHeader != "" {
-	}
-
 	resp, err := cfg.HTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)

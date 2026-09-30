@@ -14,7 +14,7 @@ import (
 
 const (
 	AppCryptoSecret = "6KYQBP847D4ATSFA"
-	saltedPrefix = "Salted__"
+	saltedPrefix    = "Salted__"
 )
 
 // getKeyAndIvFrom derives AES key and IV from a secret and salt using 3 rounds of MD5.

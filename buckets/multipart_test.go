@@ -35,7 +35,7 @@ func TestNewMultipartUploadState(t *testing.T) {
 		{
 			name:      "medium file - 4 chunks",
 			fileSize:  100 * 1024 * 1024, // 100 MB
-			wantParts: 4, // ceil(100 / 30)
+			wantParts: 4,                 // ceil(100 / 30)
 		},
 		{
 			name:      "large file - 10 chunks",
@@ -199,8 +199,8 @@ func TestEncryptedChunkPipeline(t *testing.T) {
 // TestRetryableErrorDetection tests the retry logic for different error types
 func TestRetryableErrorDetection(t *testing.T) {
 	testCases := []struct {
-		name       string
-		err        error
+		name        string
+		err         error
 		shouldRetry bool
 	}{
 		{
