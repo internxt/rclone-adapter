@@ -35,6 +35,17 @@ func NewAES256CTRCipher(key, iv []byte) (cipher.Stream, error) {
 	return cipher.NewCTR(block, iv), nil
 }
 
+// newCTRStreamAt returns an AES-256-CTR stream positioned at the given byte offset.
+func newCTRStreamAt(key, iv []byte, offset int64) (cipher.Stream, error) {
+	stream, err := NewAES256CTRCipher(key, AddToIV(iv, offset/aes.BlockSize))
+	if err != nil {
+		return nil, err
+	}
+	skip := make([]byte, offset%aes.BlockSize)
+	stream.XORKeyStream(skip, skip)
+	return stream, nil
+}
+
 // EncryptReader wraps the provided src reader in a StreamReader that
 // encrypts all data through AES‑256‑CTR (no padding):
 //

@@ -21,6 +21,7 @@ func TestEndpointConstruction(t *testing.T) {
 		{"User Usage", cfg.Drive().Users().Usage(), "https://gateway.internxt.com/drive/users/usage"},
 		{"User Limit", cfg.Drive().Users().Limit(), "https://gateway.internxt.com/drive/users/limit"},
 		{"Network FileInfo", cfg.Network().FileInfo("bucket-123", "file-456"), "https://gateway.internxt.com/network/buckets/bucket-123/files/file-456/info"},
+		{"Network FileMirrors", cfg.Network().FileMirrors("bucket-123", "file-456", 3, 6), "https://gateway.internxt.com/network/buckets/bucket-123/files/file-456?limit=3&skip=6"},
 		{"Network StartUpload", cfg.Network().StartUpload("bucket-123"), "https://gateway.internxt.com/network/v2/buckets/bucket-123/files/start"},
 		{"Network FinishUpload", cfg.Network().FinishUpload("bucket-123"), "https://gateway.internxt.com/network/v2/buckets/bucket-123/files/finish"},
 		{"File Check Files Existence", cfg.Drive().Folders().CheckFilesExistence("parent-uuid"), "https://gateway.internxt.com/drive/folders/content/parent-uuid/files/existence"},
