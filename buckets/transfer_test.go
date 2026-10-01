@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestTransfer(t *testing.T) {
@@ -138,4 +140,38 @@ func TestTransfer(t *testing.T) {
 			t.Errorf("expected empty ETag, got %s", result.ETag)
 		}
 	})
+
+	t.Run("does not read body after returning", func(t *testing.T) {
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer mockServer.Close()
+
+		cfg := newEmptyTestConfig()
+
+		for i := 0; i < 20; i++ {
+			body := &readAfterReturnDetector{r: bytes.NewReader(make([]byte, 8*1024*1024))}
+
+			_, _ = Transfer(context.Background(), cfg, mockServer.URL, body, int64(body.r.Len()))
+			body.returned.Store(true)
+
+			time.Sleep(10 * time.Millisecond)
+			if body.lateReads.Load() > 0 {
+				t.Fatalf("body was read %d times after Transfer returned", body.lateReads.Load())
+			}
+		}
+	})
+}
+
+type readAfterReturnDetector struct {
+	r         *bytes.Reader
+	returned  atomic.Bool
+	lateReads atomic.Int32
+}
+
+func (d *readAfterReturnDetector) Read(p []byte) (int, error) {
+	if d.returned.Load() {
+		d.lateReads.Add(1)
+	}
+	return d.r.Read(p)
 }
