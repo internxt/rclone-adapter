@@ -684,9 +684,10 @@ func TestDownloadFile(t *testing.T) {
 	t.Run("error - no shards", func(t *testing.T) {
 		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
-				Index:  TestIndex,
-				Size:   100,
-				Shards: []ShardInfo{},
+				Index:   TestIndex,
+				Size:    100,
+				Version: 2,
+				Shards:  []ShardInfo{},
 			}
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(info)
@@ -1210,9 +1211,10 @@ func TestDownloadFileStream(t *testing.T) {
 	t.Run("error - no shards", func(t *testing.T) {
 		infoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info := BucketFileInfo{
-				Index:  TestIndex,
-				Size:   100,
-				Shards: []ShardInfo{},
+				Index:   TestIndex,
+				Size:    100,
+				Version: 2,
+				Shards:  []ShardInfo{},
 			}
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(info)

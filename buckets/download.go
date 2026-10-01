@@ -64,7 +64,7 @@ func GetBucketFileInfo(ctx context.Context, cfg *config.Config, bucketID, fileID
 	return &info, nil
 }
 
-// DownloadFile downloads and decrypts the first shard of the given file.
+// DownloadFile downloads and decrypts the given file into destPath.
 func DownloadFile(ctx context.Context, cfg *config.Config, fileID, destPath string) error {
 	// 1) fetch file info from the bucket API
 	info, err := GetBucketFileInfo(ctx, cfg, cfg.Bucket, fileID)
@@ -78,6 +78,10 @@ func DownloadFile(ctx context.Context, cfg *config.Config, fileID, destPath stri
 			return fmt.Errorf("failed to create empty file %s: %w", destPath, err)
 		}
 		return out.Close()
+	}
+
+	if isLegacyFile(info) {
+		return downloadFileV1(ctx, cfg, info, fileID, destPath)
 	}
 
 	if len(info.Shards) == 0 {
@@ -167,6 +171,10 @@ func DownloadFileStream(ctx context.Context, cfg *config.Config, fileUUID string
 
 	if info.Size == 0 {
 		return io.NopCloser(bytes.NewReader(nil)), nil
+	}
+
+	if isLegacyFile(info) {
+		return downloadFileStreamV1(ctx, cfg, info, fileUUID, rangeValue)
 	}
 
 	if len(info.Shards) == 0 {
