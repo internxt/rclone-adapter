@@ -1,6 +1,7 @@
 package endpoints
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 )
@@ -191,6 +192,13 @@ type NetworkEndpoints struct {
 func (b *NetworkEndpoints) FileInfo(bucketID, fileID string) string {
 	u, _ := url.JoinPath(b.base, "/buckets", bucketID, "/files", fileID, "/info")
 	return u
+}
+
+// FileMirrors returns the legacy (v1) shard pointers endpoint for the shards
+// with index in [skip, skip+limit).
+func (b *NetworkEndpoints) FileMirrors(bucketID, fileID string, limit, skip int) string {
+	u, _ := url.JoinPath(b.base, "/buckets", bucketID, "/files", fileID)
+	return fmt.Sprintf("%s?limit=%d&skip=%d", u, limit, skip)
 }
 
 func (b *NetworkEndpoints) StartUpload(bucketID string) string {

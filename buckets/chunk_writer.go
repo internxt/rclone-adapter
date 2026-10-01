@@ -1,7 +1,6 @@
 package buckets
 
 import (
-	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
@@ -121,18 +120,7 @@ func (s *ChunkUploadSession) Finish(ctx context.Context, parts []CompletedPart) 
 // NewCipherAtOffset returns an AES-256-CTR cipher.Stream positioned at byteOffset.
 // Handles both block-aligned and non-aligned offsets.
 func (s *ChunkUploadSession) NewCipherAtOffset(byteOffset int64) (cipher.Stream, error) {
-	blockNum := byteOffset / int64(aes.BlockSize)
-	adjustedIV := AddToIV(s.iv, blockNum)
-	stream, err := NewAES256CTRCipher(s.fileKey, adjustedIV)
-	if err != nil {
-		return nil, err
-	}
-
-	if partial := int(byteOffset % int64(aes.BlockSize)); partial > 0 {
-		throwaway := make([]byte, partial)
-		stream.XORKeyStream(throwaway, throwaway)
-	}
-	return stream, nil
+	return newCTRStreamAt(s.fileKey, s.iv, byteOffset)
 }
 
 // HashEncryptedData feeds already-encrypted bytes into the session's SHA-256 hasher.
