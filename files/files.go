@@ -188,6 +188,47 @@ func RenameFile(ctx context.Context, cfg *config.Config, fileUUID, newPlainName,
 	return nil
 }
 
+// ReplaceFileRequest is the body of PUT /files/{uuid}
+type ReplaceFileRequest struct {
+	FileID string `json:"fileId"`
+	Size   int64  `json:"size"`
+}
+
+// ReplaceFile points the existing file fileUUID at content already
+// uploaded to the network as fileID, keeping the file's UUID, name and
+// folder. This is what the web app does when a file is replaced.
+func ReplaceFile(ctx context.Context, cfg *config.Config, fileUUID, fileID string, size int64) (*FileMeta, error) {
+	endpoint := cfg.Endpoints.Drive().Files().Replace(fileUUID)
+
+	body, err := json.Marshal(ReplaceFileRequest{FileID: fileID, Size: size})
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal replace file request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create replace file request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+cfg.Token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := cfg.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute replace file request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, errors.NewHTTPError(resp, "replace file")
+	}
+
+	var meta FileMeta
+	if err := json.NewDecoder(resp.Body).Decode(&meta); err != nil {
+		return nil, fmt.Errorf("failed to decode replace file response: %w", err)
+	}
+	return &meta, nil
+}
+
 // MoveFile moves a file to a new destination folder, optionally renaming it.
 //
 // If newName is empty it is omitted and the server keeps the current name.

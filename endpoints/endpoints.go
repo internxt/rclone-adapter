@@ -112,6 +112,11 @@ func (f *FileEndpoints) Move(uuid string) string {
 	return u
 }
 
+func (f *FileEndpoints) Replace(uuid string) string {
+	u, _ := url.JoinPath(f.base, uuid)
+	return u
+}
+
 func (f *FileEndpoints) Thumbnail() string {
 	u, _ := url.JoinPath(f.base, "/thumbnail")
 	return u
