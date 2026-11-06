@@ -560,3 +560,68 @@ func TestCheckFilesExistence(t *testing.T) {
 		})
 	}
 }
+
+func TestReplaceFile(t *testing.T) {
+	testCases := []struct {
+		name           string
+		mockStatusCode int
+		expectError    bool
+		errorContains  string
+	}{
+		{name: "successful replace", mockStatusCode: http.StatusOK},
+		{name: "not found - 404", mockStatusCode: http.StatusNotFound, expectError: true, errorContains: "404"},
+		{name: "server error - 500", mockStatusCode: http.StatusInternalServerError, expectError: true, errorContains: "500"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var captured ReplaceFileRequest
+
+			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPut {
+					t.Errorf("expected PUT request, got %s", r.Method)
+				}
+				if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
+					t.Error("expected Authorization header with Bearer token")
+				}
+				if r.URL.Path != "/drive/files/"+buckets.TestFileUUID {
+					t.Errorf("expected path /drive/files/%s, got %s", buckets.TestFileUUID, r.URL.Path)
+				}
+				if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+					t.Errorf("failed to decode request body: %v", err)
+				}
+
+				w.WriteHeader(tc.mockStatusCode)
+				if tc.mockStatusCode != http.StatusOK {
+					w.Write([]byte("error message"))
+					return
+				}
+				json.NewEncoder(w).Encode(FileMeta{UUID: buckets.TestFileUUID, FileID: captured.FileID, Size: json.Number(fmt.Sprint(captured.Size))})
+			}))
+			defer mockServer.Close()
+
+			cfg := newTestConfig(mockServer.URL)
+
+			meta, err := ReplaceFile(context.Background(), cfg, buckets.TestFileUUID, "new-file-id", 1234)
+
+			if tc.expectError {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tc.errorContains) {
+					t.Errorf("expected error to contain %q, got %q", tc.errorContains, err.Error())
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if captured.FileID != "new-file-id" || captured.Size != 1234 {
+				t.Errorf("unexpected request body: %+v", captured)
+			}
+			if meta.UUID != buckets.TestFileUUID || meta.FileID != "new-file-id" || meta.Size.String() != "1234" {
+				t.Errorf("unexpected response: %+v", meta)
+			}
+		})
+	}
+}

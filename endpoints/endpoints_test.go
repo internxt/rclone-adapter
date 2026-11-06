@@ -14,6 +14,7 @@ func TestEndpointConstruction(t *testing.T) {
 		{"File Create", cfg.Drive().Files().Create(), "https://gateway.internxt.com/drive/files"},
 		{"File Meta", cfg.Drive().Files().Meta("test-uuid"), "https://gateway.internxt.com/drive/files/test-uuid/meta"},
 		{"File Delete", cfg.Drive().Files().Delete("test-uuid"), "https://gateway.internxt.com/drive/files/test-uuid"},
+		{"File Replace", cfg.Drive().Files().Replace("test-uuid"), "https://gateway.internxt.com/drive/files/test-uuid"},
 		{"Folder Create", cfg.Drive().Folders().Create(), "https://gateway.internxt.com/drive/folders"},
 		{"Folder Delete", cfg.Drive().Folders().Delete("test-uuid"), "https://gateway.internxt.com/drive/folders/test-uuid"},
 		{"Folder ContentFolders", cfg.Drive().Folders().ContentFolders("parent-uuid"), "https://gateway.internxt.com/drive/folders/v2/content/parent-uuid/folders"},
