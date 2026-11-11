@@ -311,7 +311,7 @@ func UploadFileStreamAuto(ctx context.Context, cfg *config.Config, targetFolderU
 	// never has to be held in memory.
 	var thumbGen *thumbnails.Generator
 	ext := strings.TrimPrefix(filepath.Ext(fileName), ".")
-	if thumbnails.IsSupportedFormat(ext) && plainSize > 0 && plainSize <= config.MaxThumbnailSourceSize {
+	if !cfg.SkipThumbnails && thumbnails.IsSupportedFormat(ext) && plainSize > 0 && plainSize <= config.MaxThumbnailSourceSize {
 		thumbGen = thumbnails.NewGenerator(thumbnails.DefaultConfig())
 		in = io.TeeReader(in, thumbGen)
 	}

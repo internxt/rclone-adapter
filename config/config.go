@@ -31,6 +31,7 @@ type Config struct {
 	Endpoints          *endpoints.Config `json:"-"` // Centralized API endpoint management
 	FileLimits         *FileLimitsCache  `json:"-"` // Cached account upload limits
 	SkipHashValidation bool              `json:"skip_hash_validation,omitempty"`
+	SkipThumbnails     bool              `json:"skip_thumbnails,omitempty"` // Don't make thumbnails for uploaded images
 }
 
 // FileLimitsCache holds the account's MaxUploadFileSize with a TTL refresh
