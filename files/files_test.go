@@ -584,8 +584,8 @@ func TestReplaceFile(t *testing.T) {
 				if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
 					t.Error("expected Authorization header with Bearer token")
 				}
-				if r.URL.Path != "/drive/files/"+buckets.TestFileUUID {
-					t.Errorf("expected path /drive/files/%s, got %s", buckets.TestFileUUID, r.URL.Path)
+				if r.URL.Path != "/drive/files/"+testFileUUID {
+					t.Errorf("expected path /drive/files/%s, got %s", testFileUUID, r.URL.Path)
 				}
 				if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
 					t.Errorf("failed to decode request body: %v", err)
@@ -596,13 +596,13 @@ func TestReplaceFile(t *testing.T) {
 					w.Write([]byte("error message"))
 					return
 				}
-				json.NewEncoder(w).Encode(FileMeta{UUID: buckets.TestFileUUID, FileID: captured.FileID, Size: json.Number(fmt.Sprint(captured.Size))})
+				json.NewEncoder(w).Encode(FileMeta{UUID: testFileUUID, FileID: captured.FileID, Size: json.Number(fmt.Sprint(captured.Size))})
 			}))
 			defer mockServer.Close()
 
 			cfg := newTestConfig(mockServer.URL)
 
-			meta, err := ReplaceFile(context.Background(), cfg, buckets.TestFileUUID, "new-file-id", 1234)
+			meta, err := ReplaceFile(context.Background(), cfg, testFileUUID, "new-file-id", 1234)
 
 			if tc.expectError {
 				if err == nil {
@@ -619,7 +619,7 @@ func TestReplaceFile(t *testing.T) {
 			if captured.FileID != "new-file-id" || captured.Size != 1234 {
 				t.Errorf("unexpected request body: %+v", captured)
 			}
-			if meta.UUID != buckets.TestFileUUID || meta.FileID != "new-file-id" || meta.Size.String() != "1234" {
+			if meta.UUID != testFileUUID || meta.FileID != "new-file-id" || meta.Size.String() != "1234" {
 				t.Errorf("unexpected response: %+v", meta)
 			}
 		})
