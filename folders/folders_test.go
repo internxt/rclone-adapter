@@ -449,8 +449,8 @@ func TestListFolders(t *testing.T) {
 			if query.Has("cursor") {
 				t.Errorf("expected no cursor on first page, got %s", query.Get("cursor"))
 			}
-			if query.Get("limit") != "1000" {
-				t.Errorf("expected limit 1000, got %s", query.Get("limit"))
+			if query.Get("limit") != "250" {
+				t.Errorf("expected limit 250, got %s", query.Get("limit"))
 			}
 			if query.Get("order") != "ASC" {
 				t.Errorf("expected order ASC, got %s", query.Get("order"))
@@ -649,10 +649,10 @@ func TestListAllFiles(t *testing.T) {
 		var cursors []string
 		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cursors = append(cursors, r.URL.Query().Get("cursor"))
-			if r.URL.Query().Get("limit") != "1000" {
-				t.Errorf("expected limit 1000, got %s", r.URL.Query().Get("limit"))
+			if r.URL.Query().Get("limit") != "250" {
+				t.Errorf("expected limit 250, got %s", r.URL.Query().Get("limit"))
 			}
-			cursorPage(w, r, "files", all, 1000)
+			cursorPage(w, r, "files", all, 250)
 		}))
 		defer mockServer.Close()
 
@@ -669,8 +669,8 @@ func TestListAllFiles(t *testing.T) {
 		if files[len(files)-1].UUID != "file-2499" {
 			t.Errorf("expected last file file-2499, got %s", files[len(files)-1].UUID)
 		}
-		if strings.Join(cursors, ",") != ",1000,2000" {
-			t.Errorf("expected cursors [\"\" 1000 2000], got %q", cursors)
+		if strings.Join(cursors, ",") != ",250,500,750,1000,1250,1500,1750,2000,2250" {
+			t.Errorf("unexpected cursors %q", cursors)
 		}
 	})
 
@@ -746,7 +746,7 @@ func TestListAllFolders(t *testing.T) {
 		calls := 0
 		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			calls++
-			cursorPage(w, r, "folders", all, 1000)
+			cursorPage(w, r, "folders", all, 250)
 		}))
 		defer mockServer.Close()
 
@@ -760,7 +760,7 @@ func TestListAllFolders(t *testing.T) {
 		if len(folders) != len(all) {
 			t.Errorf("expected %d folders, got %d", len(all), len(folders))
 		}
-		if calls != 2 {
+		if calls != 5 {
 			t.Errorf("expected 2 requests, got %d", calls)
 		}
 	})
@@ -789,10 +789,10 @@ func TestListURLLimit(t *testing.T) {
 		limit int
 		want  string
 	}{
-		{-5, "1000"},
-		{0, "1000"},
+		{-5, "250"},
+		{0, "250"},
 		{10, "50"},
-		{5000, "1000"},
+		{5000, "250"},
 	}
 	for _, tc := range cases {
 		u, err := listURL("https://example.com/list", ListOptions{Limit: tc.limit})
