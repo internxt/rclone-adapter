@@ -129,7 +129,7 @@ const (
 	// MinPageSize and MaxPageSize are the page size bounds accepted by the
 	// cursor based list endpoints.
 	MinPageSize = 50
-	MaxPageSize = 1000
+	MaxPageSize = 250
 )
 
 // maxExistenceNames is the most names CheckFoldersExistence sends in one
