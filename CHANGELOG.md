@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/internxt/rclone-adapter/compare/v0.2.0...v0.3.0) (2026-11-17)
+
+
+### Features
+
+* **config:** add SkipThumbnails to skip thumbnail generation on upload ([b37cec2](https://github.com/internxt/rclone-adapter/commit/b37cec21a9b6f1f1c2c84dfa456b27662879dd5e))
+
 ## [0.2.0](https://github.com/internxt/rclone-adapter/compare/v0.1.0...v0.2.0) (2026-11-11)
 
 
